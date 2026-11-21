@@ -7,7 +7,7 @@ import {
   Workflow, BarChart as BarChartIcon, Settings, Search, Bell,
   MoreHorizontal, Mail, Home, Star, LogOut, Plus, X, Trash2
 } from "lucide-react";
-import { BarChart, AreaChart, ProgressCircle } from "@tremor/react";
+import { BarChart, AreaChart } from "@tremor/react";
 import { createClient } from "../lib/supabase/client";
 import ListingsMap from "../components/ListingsMap";
 
@@ -70,102 +70,115 @@ export default function DashboardClient({
   const [selectedListingId, setSelectedListingId] = useState<string | null>(
     initialListings[0]?.id || null
   );
-// Real-time Team Sync across Leads, Listings, and Workflows
-useEffect(() => {
-  if (!tenantId) return;
 
-  const channel = supabase
-    .channel(`dashboard-live-${tenantId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "leads",
-        filter: `tenant_id=eq.${tenantId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          setLeads((prev) =>
-            prev.some((l) => l.id === payload.new.id)
-              ? prev
-              : [payload.new, ...prev]
-          );
-        } else if (payload.eventType === "UPDATE") {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === payload.new.id ? { ...l, ...payload.new } : l
-            )
-          );
-        } else if (payload.eventType === "DELETE") {
-          setLeads((prev) => prev.filter((l) => l.id !== payload.old.id));
-        }
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "listings",
-        filter: `tenant_id=eq.${tenantId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          setListings((prev) =>
-            prev.some((item) => item.id === payload.new.id)
-              ? prev
-              : [payload.new, ...prev]
-          );
-        } else if (payload.eventType === "UPDATE") {
-          setListings((prev) =>
-            prev.map((item) =>
-              item.id === payload.new.id ? { ...item, ...payload.new } : item
-            )
-          );
-        } else if (payload.eventType === "DELETE") {
-          setListings((prev) => {
-            const updated = prev.filter((item) => item.id !== payload.old.id);
-            setSelectedListingId((curr) =>
-              curr === payload.old.id ? updated[0]?.id || null : curr
+  // Drag-and-Drop Kanban State
+  const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+
+  // Public Capture Links & LPMAMA AI Qualifier Drawer State
+  const [copiedLinkKey, setCopiedLinkKey] = useState<string | null>(null);
+  const [activeLpmamaLead, setActiveLpmamaLead] = useState<any | null>(null);
+  const [lpmamaEvents, setLpmamaEvents] = useState<any[]>([]);
+  const [prospectReplyInput, setProspectReplyInput] = useState("");
+  const [isQualifying, setIsQualifying] = useState(false);
+
+  // Real-time Team Sync across Leads, Listings, and Workflows
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const channel = supabase
+      .channel(`dashboard-live-${tenantId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "leads",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setLeads((prev) =>
+              prev.some((l) => l.id === payload.new.id)
+                ? prev
+                : [payload.new, ...prev]
             );
-            return updated;
-          });
+          } else if (payload.eventType === "UPDATE") {
+            setLeads((prev) =>
+              prev.map((l) =>
+                l.id === payload.new.id ? { ...l, ...payload.new } : l
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            setLeads((prev) => prev.filter((l) => l.id !== payload.old.id));
+          }
         }
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "workflows",
-        filter: `tenant_id=eq.${tenantId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          setWorkflows((prev) =>
-            prev.some((wf) => wf.id === payload.new.id)
-              ? prev
-              : [...prev, payload.new]
-          );
-        } else if (payload.eventType === "UPDATE") {
-          setWorkflows((prev) =>
-            prev.map((wf) =>
-              wf.id === payload.new.id ? { ...wf, ...payload.new } : wf
-            )
-          );
-        } else if (payload.eventType === "DELETE") {
-          setWorkflows((prev) => prev.filter((wf) => wf.id !== payload.old.id));
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "listings",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setListings((prev) =>
+              prev.some((item) => item.id === payload.new.id)
+                ? prev
+                : [payload.new, ...prev]
+            );
+          } else if (payload.eventType === "UPDATE") {
+            setListings((prev) =>
+              prev.map((item) =>
+                item.id === payload.new.id ? { ...item, ...payload.new } : item
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            setListings((prev) => {
+              const updated = prev.filter((item) => item.id !== payload.old.id);
+              setSelectedListingId((curr) =>
+                curr === payload.old.id ? updated[0]?.id || null : curr
+              );
+              return updated;
+            });
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "workflows",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setWorkflows((prev) =>
+              prev.some((wf) => wf.id === payload.new.id)
+                ? prev
+                : [...prev, payload.new]
+            );
+          } else if (payload.eventType === "UPDATE") {
+            setWorkflows((prev) =>
+              prev.map((wf) =>
+                wf.id === payload.new.id ? { ...wf, ...payload.new } : wf
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            setWorkflows((prev) => prev.filter((wf) => wf.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [tenantId, supabase]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, supabase]);
+
   // Add Lead Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -216,6 +229,63 @@ useEffect(() => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = "/login";
+  };
+
+  const copyPublicLink = (key: string, path: string) => {
+    const fullUrl = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedLinkKey(key);
+    setTimeout(() => setCopiedLinkKey(null), 2000);
+  };
+
+  const openLpmamaDrawer = async (lead: any) => {
+    setActiveLpmamaLead(lead);
+    setProspectReplyInput("");
+    const { data } = await supabase
+      .from("lead_events")
+      .select("*")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: true });
+    setLpmamaEvents(data || []);
+  };
+
+  const handleSimulateProspectReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeLpmamaLead || !prospectReplyInput.trim()) return;
+    setIsQualifying(true);
+
+    const res = await fetch("/api/ai/qualify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leadId: activeLpmamaLead.id,
+        prospectReply: prospectReplyInput.trim(),
+      }),
+    });
+    const data = await res.json();
+    setIsQualifying(false);
+
+    if (!res.ok) return;
+
+    const updatedLead = {
+      ...activeLpmamaLead,
+      intent_score: data.intentScore,
+      status: data.status,
+      lpmama_data: data.lpmama,
+    };
+
+    setActiveLpmamaLead(updatedLead);
+    setLeads((prev) =>
+      prev.map((item) => (item.id === updatedLead.id ? updatedLead : item))
+    );
+    setProspectReplyInput("");
+
+    const { data: refreshedEvents } = await supabase
+      .from("lead_events")
+      .select("*")
+      .eq("lead_id", updatedLead.id)
+      .order("created_at", { ascending: true });
+    setLpmamaEvents(refreshedEvents || []);
   };
 
   // Create new lead in Supabase
@@ -485,14 +555,14 @@ useEffect(() => {
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
-          <NavItem href="/" icon={<LayoutDashboard size={20} />} label="Dashboard" active />
+          <NavItem href="/dashboard" icon={<LayoutDashboard size={20} />} label="Dashboard" active />
           <NavItem href="/leads" icon={<Users size={20} />} label="Leads" />
           <NavItem href="/listings" icon={<Building size={20} />} label="Listings" />
           <NavItem href="/deals" icon={<DollarSign size={20} />} label="Deals" />
           <NavItem href="/contacts" icon={<Contact size={20} />} label="Contacts" />
-<NavItem href="/tasks" icon={<CheckSquare size={20} />} label="Tasks" />
-<NavItem href="/workflows" icon={<Workflow size={20} />} label="Workflows" />
-<NavItem href="/reports" icon={<BarChartIcon size={20} />} label="Reports" />
+          <NavItem href="/tasks" icon={<CheckSquare size={20} />} label="Tasks" />
+          <NavItem href="/workflows" icon={<Workflow size={20} />} label="Workflows" />
+          <NavItem href="/reports" icon={<BarChartIcon size={20} />} label="Reports" />
           <NavItem href="/settings" icon={<Settings size={20} />} label="Settings" />
         </nav>
 
@@ -539,22 +609,20 @@ useEffect(() => {
             </div>
           </div>
         </header>
-<div className="flex items-center gap-3 mb-8">
-  <p className="text-gray-400 text-sm">
-    {today ? `${today} | ` : ""}👋 Live Workspace Overview
-  </p>
-  <span className="bg-green-500/15 border border-green-500/30 text-green-400 text-[11px] px-2.5 py-0.5 rounded-full">
-    Live Team Sync
-  </span>
-</div>
+
         {/* Dashboard Content */}
         <div className="p-8 overflow-y-auto flex-1">
           <h1 className="text-2xl font-semibold mb-1 capitalize">
             Dashboard: Welcome back, {displayName}!
           </h1>
-          <p className="text-gray-400 text-sm mb-8">
-            {today ? `${today} | ` : ""}👋 Live Workspace Overview
-          </p>
+          <div className="flex items-center gap-3 mb-8">
+            <p className="text-gray-400 text-sm">
+              {today ? `${today} | ` : ""}👋 Live Workspace Overview
+            </p>
+            <span className="bg-green-500/15 border border-green-500/30 text-green-400 text-[11px] px-2.5 py-0.5 rounded-full">
+              Live Team Sync
+            </span>
+          </div>
 
           {/* Top Row: Metrics & Kanban */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
@@ -598,23 +666,34 @@ useEffect(() => {
                   />
                 </div>
                 <div className="col-span-1 flex justify-around items-center h-32">
-  <MetricRing value={75} label="Pipeline" />
-  <MetricRing value={45} label="Quota" />
-</div>
+                  <MetricRing value={75} label="Pipeline" />
+                  <MetricRing value={45} label="Quota" />
+                </div>
               </div>
             </div>
 
             {/* Lead Pipeline (Kanban) */}
             <div className="bg-[#24282B] rounded-xl p-6 border border-gray-800 flex flex-col">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-wrap justify-between items-center gap-2 mb-6">
                 <h2 className="text-lg font-medium text-gray-200">Lead Pipeline (Kanban)</h2>
-                <button
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="flex items-center gap-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Plus size={14} />
-                  <span>Add Lead</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copyPublicLink("valuation", `/valuation/${tenantId}`)}
+                    className="text-xs bg-[#111315] hover:bg-gray-800 border border-gray-700 text-green-400 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    {copiedLinkKey === "valuation"
+                      ? "✓ Valuation Link Copied!"
+                      : "Copy Home Valuation Link"}
+                  </button>
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>Add Lead</span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-4 overflow-x-auto pb-2 h-full">
@@ -625,7 +704,21 @@ useEffect(() => {
                       key={stage}
                       title={stage}
                       leads={stageLeads}
+                      isDragOver={dragOverStage === stage}
+                      onDragStartLead={(leadId) => setDraggedLeadId(leadId)}
+                      onDragOverStage={() => setDragOverStage(stage)}
+                      onDragLeaveStage={() =>
+                        setDragOverStage((curr) => (curr === stage ? null : curr))
+                      }
+                      onDropLead={() => {
+                        if (draggedLeadId) {
+                          handleStageChange(draggedLeadId, stage);
+                        }
+                        setDraggedLeadId(null);
+                        setDragOverStage(null);
+                      }}
                       onStageChange={handleStageChange}
+                      onOpenLpmama={openLpmamaDrawer}
                     />
                   );
                 })}
@@ -701,6 +794,10 @@ useEffect(() => {
                         status={item.status}
                         tag={item.tag}
                         isSelected={selectedListing?.id === item.id}
+                        isLinkCopied={copiedLinkKey === `listing_${item.id}`}
+                        onCopyLink={() =>
+                          copyPublicLink(`listing_${item.id}`, `/p/${item.id}`)
+                        }
                         onSelect={() => setSelectedListingId(item.id)}
                         onStatusChange={(nextStatus) =>
                           handleListingStatusChange(item.id, nextStatus)
@@ -718,6 +815,123 @@ useEffect(() => {
           </div>
         </div>
       </main>
+
+      {/* Interactive LPMAMA AI Qualification Drawer */}
+      {activeLpmamaLead && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-end z-50">
+          <div className="bg-[#1A1D1F] border-l border-gray-800 w-full max-w-lg h-full flex flex-col justify-between p-6 overflow-y-auto">
+            <div className="space-y-5">
+              <div className="flex items-start justify-between border-b border-gray-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white">
+                      {activeLpmamaLead.full_name}
+                    </h3>
+                    <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-semibold">
+                      Intent: {activeLpmamaLead.intent_score ?? 25}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Source: {activeLpmamaLead.lead_source || "Direct"} • Stage:{" "}
+                    <span className="text-green-400">{activeLpmamaLead.status}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveLpmamaLead(null)}
+                  className="text-gray-400 hover:text-white text-sm px-2 py-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 6 LPMAMA Pillars Status Grid */}
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  LPMAMA Qualification Tracker
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    { label: "Location", val: activeLpmamaLead.lpmama_data?.location },
+                    { label: "Price", val: activeLpmamaLead.lpmama_data?.price },
+                    { label: "Mortgage", val: activeLpmamaLead.lpmama_data?.mortgage },
+                    { label: "Agent Status", val: activeLpmamaLead.lpmama_data?.agent_status },
+                    { label: "Motivation", val: activeLpmamaLead.lpmama_data?.motivation },
+                    { label: "Appointment", val: activeLpmamaLead.lpmama_data?.appointment },
+                  ].map((pillar) => (
+                    <div
+                      key={pillar.label}
+                      className="bg-[#111315] border border-gray-800 rounded-lg p-2.5"
+                    >
+                      <div className="text-[10px] text-gray-500">{pillar.label}</div>
+                      <div className="text-gray-200 font-medium truncate mt-0.5">
+                        {pillar.val || "Pending..."}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* SMS / AI Conversation Thread */}
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  Autonomous AI SMS Thread
+                </div>
+                <div className="bg-[#111315] border border-gray-800 rounded-xl p-4 space-y-3 max-h-72 overflow-y-auto">
+                  {lpmamaEvents.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic">
+                      No AI messages yet. Simulate a prospect reply below to trigger LPMAMA qualification.
+                    </p>
+                  ) : (
+                    lpmamaEvents.map((ev) => (
+                      <div
+                        key={ev.id}
+                        className={`flex flex-col ${
+                          ev.message_sender === "prospect" ? "items-end" : "items-start"
+                        }`}
+                      >
+                        <span className="text-[10px] text-gray-500 mb-0.5">
+                          {ev.message_sender === "prospect" ? "Prospect" : "CloseFlow AI"}
+                        </span>
+                        <div
+                          className={`rounded-xl px-3.5 py-2 text-xs max-w-[85%] leading-relaxed ${
+                            ev.message_sender === "prospect"
+                              ? "bg-green-600 text-white"
+                              : "bg-[#24282B] border border-gray-700 text-gray-200"
+                          }`}
+                        >
+                          {ev.message_text}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Test / Simulate Prospect Reply Input */}
+            <form
+              onSubmit={handleSimulateProspectReply}
+              className="pt-4 border-t border-gray-800 flex gap-2"
+            >
+              <input
+                type="text"
+                value={prospectReplyInput}
+                onChange={(e) => setProspectReplyInput(e.target.value)}
+                placeholder="Simulate prospect SMS reply (e.g. 'Looking in Jacksonville around $550k')..."
+                className="flex-1 bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+              />
+              <button
+                type="submit"
+                disabled={isQualifying}
+                className="bg-green-600 hover:bg-green-500 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                {isQualifying ? "AI Replying..." : "Send Reply"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Lead Modal */}
       {isAddModalOpen && (
@@ -1087,15 +1301,42 @@ function Metric({ label, value, trend }: { label: string; value: string; trend: 
 function KanbanColumn({
   title,
   leads,
+  isDragOver = false,
+  onDragStartLead,
+  onDragOverStage,
+  onDragLeaveStage,
+  onDropLead,
   onStageChange,
+  onOpenLpmama,
 }: {
   title: string;
   leads: any[];
+  isDragOver?: boolean;
+  onDragStartLead: (leadId: string) => void;
+  onDragOverStage: () => void;
+  onDragLeaveStage: () => void;
+  onDropLead: () => void;
   onStageChange: (leadId: string, newStatus: string) => void;
+  onOpenLpmama: (lead: any) => void;
 }) {
   return (
-    <div className="flex-1 min-w-[175px] flex flex-col gap-3">
-      <div className="flex justify-between items-center text-sm mb-2">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOverStage();
+      }}
+      onDragLeave={onDragLeaveStage}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropLead();
+      }}
+      className={`flex-1 min-w-[185px] flex flex-col gap-3 rounded-lg p-2 transition-colors ${
+        isDragOver
+          ? "bg-green-500/10 border border-dashed border-green-500/60"
+          : "border border-transparent"
+      }`}
+    >
+      <div className="flex justify-between items-center text-sm mb-1">
         <span className="text-gray-300 font-medium">{title}</span>
         <span className="bg-[#111315] text-green-500 text-[10px] px-2 py-0.5 rounded-full border border-gray-700">
           {leads.length}
@@ -1103,46 +1344,69 @@ function KanbanColumn({
       </div>
       {leads.length === 0 ? (
         <div className="text-xs text-gray-600 italic border border-dashed border-gray-800 rounded p-3 text-center">
-          No leads
+          Drop lead here
         </div>
       ) : (
-        leads.map((lead) => (
-          <div
-            key={lead.id}
-            className="bg-[#2A2E32] p-3 rounded border border-gray-700 hover:border-gray-500 transition-colors flex flex-col gap-2"
-          >
-            <div>
-              <div className="text-xs font-medium text-gray-200 mb-0.5">
-                {lead.full_name}
+        leads.map((lead) => {
+          const score = Number(lead.intent_score ?? 25);
+          const isHot = score >= 70;
+          return (
+            <div
+              key={lead.id}
+              draggable
+              onDragStart={() => onDragStartLead(lead.id)}
+              className="bg-[#2A2E32] p-3 rounded border border-gray-700 hover:border-green-500/60 transition-colors flex flex-col gap-2 cursor-grab active:cursor-grabbing"
+            >
+              <div className="flex items-start justify-between gap-1">
+                <div>
+                  <div className="text-xs font-medium text-gray-200 mb-0.5">
+                    {lead.full_name}
+                  </div>
+                  <div className="text-[11px] text-gray-400">
+                    ${Number(lead.estimated_value || 0).toLocaleString()}
+                  </div>
+                </div>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
+                    isHot
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                      : "bg-[#111315] text-gray-400 border border-gray-700"
+                  }`}
+                  title="Behavioral Intent Score"
+                >
+                  {isHot ? `🔥 ${score}%` : `${score}%`}
+                </span>
               </div>
-              <div className="text-[11px] text-gray-400">
-                ${Number(lead.estimated_value || 0).toLocaleString()}
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between gap-1 pt-1 border-t border-gray-700/60">
-              <span className="bg-green-500/20 text-green-500 text-[10px] px-2 py-0.5 rounded shrink-0">
-                {lead.tag || "New"}
-              </span>
-              <select
-                value={lead.status}
-                onChange={(e) => onStageChange(lead.id, e.target.value)}
-                aria-label={`Move ${lead.full_name} to stage`}
-                className="bg-[#1A1D1F] text-gray-300 text-[10px] border border-gray-700 rounded px-1.5 py-0.5 outline-none focus:border-green-500 cursor-pointer max-w-[95px]"
-              >
-                {PIPELINE_STAGES.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {stage}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between gap-1 pt-1 border-t border-gray-700/60">
+                <button
+                  type="button"
+                  onClick={() => onOpenLpmama(lead)}
+                  className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer shrink-0"
+                >
+                  LPMAMA AI
+                </button>
+                <select
+                  value={lead.status}
+                  onChange={(e) => onStageChange(lead.id, e.target.value)}
+                  aria-label={`Move ${lead.full_name} to stage`}
+                  className="bg-[#1A1D1F] text-gray-300 text-[10px] border border-gray-700 rounded px-1.5 py-0.5 outline-none focus:border-green-500 cursor-pointer max-w-[90px]"
+                >
+                  {PIPELINE_STAGES.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
 }
+
 function MetricRing({ value, label }: { value: number; label: string }) {
   const radius = 26;
   const circumference = 2 * Math.PI * radius;
@@ -1180,6 +1444,7 @@ function MetricRing({ value, label }: { value: number; label: string }) {
     </div>
   );
 }
+
 function WorkflowCard({
   title,
   icon,
@@ -1249,6 +1514,8 @@ function ListingItem({
   status,
   tag,
   isSelected = false,
+  isLinkCopied = false,
+  onCopyLink,
   onSelect,
   onStatusChange,
   onDelete,
@@ -1259,6 +1526,8 @@ function ListingItem({
   status: string;
   tag: string;
   isSelected?: boolean;
+  isLinkCopied?: boolean;
+  onCopyLink: () => void;
   onSelect: () => void;
   onStatusChange: (nextStatus: string) => void;
   onDelete: () => void;
@@ -1301,19 +1570,31 @@ function ListingItem({
           <span className="text-gray-300 font-medium">{price}</span>
           <span className="text-gray-500 ml-2">{specs}</span>
         </div>
-        <select
-          value={status}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => onStatusChange(e.target.value)}
-          aria-label={`Change status for ${address}`}
-          className="bg-[#111315] text-gray-300 text-[10px] border border-gray-700 rounded px-1.5 py-0.5 outline-none focus:border-green-500 cursor-pointer"
-        >
-          {LISTING_STATUSES.map((st) => (
-            <option key={st} value={st}>
-              {st}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopyLink();
+            }}
+            className="text-[10px] bg-[#111315] hover:bg-gray-800 border border-gray-700 text-green-400 px-2 py-0.5 rounded transition-colors cursor-pointer"
+          >
+            {isLinkCopied ? "✓ Copied" : "Capture Link"}
+          </button>
+          <select
+            value={status}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onStatusChange(e.target.value)}
+            aria-label={`Change status for ${address}`}
+            className="bg-[#111315] text-gray-300 text-[10px] border border-gray-700 rounded px-1.5 py-0.5 outline-none focus:border-green-500 cursor-pointer"
+          >
+            {LISTING_STATUSES.map((st) => (
+              <option key={st} value={st}>
+                {st}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   );
