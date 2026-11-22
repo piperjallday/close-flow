@@ -158,3 +158,16 @@ html[data-theme="light"] .gm-style-iw-d,
 html[data-theme="light"] .gm-style .gm-style-mtc button {
   color: #111827 !important;
 }
+/* Fix Faint Green/Emerald Banner Text in Light Mode (Settings, Alerts, Badges) */
+html[data-theme="light"] .text-green-200,
+html[data-theme="light"] .text-green-300,
+html[data-theme="light"] .text-green-400,
+html[data-theme="light"] .text-green-500,
+html[data-theme="light"] .text-green-600,
+html[data-theme="light"] .text-emerald-200,
+html[data-theme="light"] .text-emerald-300,
+html[data-theme="light"] .text-emerald-400,
+html[data-theme="light"] .text-emerald-500,
+html[data-theme="light"] .text-emerald-600 {
+  color: #111827 !important;
+}
