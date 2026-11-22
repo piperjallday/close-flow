@@ -10,7 +10,7 @@ export default function PropertyValuationLandingPage() {
   const tenantId = String(params?.tenantId || "");
   const supabase = createClient();
 
-  const [brokerageName, setBrokerageName] = useState("CloseFlow Commercial");
+  const [brokerageName, setBrokerageName] = useState("CloseFlow Real Estate");
   const [propertyAddress, setPropertyAddress] = useState("");
   const [estimatedValue, setEstimatedValue] = useState("");
   const [fullName, setFullName] = useState("");

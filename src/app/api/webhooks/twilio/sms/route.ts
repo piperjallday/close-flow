@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const incomingBody = String(formData.get("Body") || "").trim();
 
     if (!fromPhone || !incomingBody) {
-      return twimlResponse("Thanks for messaging CloseFlow. How can our team assist with your commercial property search?");
+      return twimlResponse("Thanks for messaging CloseFlow. How can our team assist with your property search?");
     }
 
     const supabase = createClient(
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 
     // 4. Run AI Concierge qualification
     const result = await runAiConcierge({
-      workspaceName: tenant.name || "CloseFlow Commercial",
+      workspaceName: tenant.name || "CloseFlow Real Estate",
       leadName: lead?.name?.startsWith("SMS Lead") ? "there" : lead?.name || "there",
       history: updatedHistory,
       existingData: lead?.qualification_data || {},

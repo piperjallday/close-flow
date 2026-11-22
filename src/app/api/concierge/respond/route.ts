@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    let workspaceName = "CloseFlow Commercial";
+    let workspaceName = "CloseFlow Real Estate";
     if (user) {
       const { data: profile } = await supabase
         .from("users")

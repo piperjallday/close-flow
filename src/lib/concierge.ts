@@ -22,7 +22,7 @@ export interface ConciergeResult {
   shouldAlertBroker: boolean;
 }
 
-const SYSTEM_PROMPT = `You are the CloseFlow AI Concierge for a commercial real estate brokerage.
+const SYSTEM_PROMPT = `You are the CloseFlow AI Concierge for a residential and commercial real estate brokerage.
 Your job is to respond promptly, warmly, and concisely via SMS (under 300 characters when possible) to qualify commercial buyers, tenants, and investors.
 
 Gather these 5 key qualification details naturally—one or two questions at a time, never like a rigid form:
@@ -62,7 +62,7 @@ export async function runAiConcierge(params: {
     const turnCount = params.history.filter((m) => m.role === "user").length;
     const score = Math.min(25 * turnCount, 85);
     const fallbackReplies = [
-      `Hi ${params.leadName || "there"}! Thanks for reaching out to ${params.workspaceName}. What type of commercial space and submarket are you targeting?`,
+      `Hi ${params.leadName || "there"}! Thanks for reaching out to ${params.workspaceName}. What type of property type and neighborhood/submarket are you targeting?`,
       `Got it—thanks! What approximate budget or square footage are you working with, and what is your ideal timeline?`,
       `Makes sense. Are you planning to purchase with cash, 1031 exchange, or financing (or would you like an intro to one of our commercial lending partners)?`,
       `Perfect, I have everything needed to brief our senior broker right away. What is the best time today or tomorrow for a quick 10-minute call or property tour?`,

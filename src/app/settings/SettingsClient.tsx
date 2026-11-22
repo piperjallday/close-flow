@@ -366,7 +366,7 @@ export default function SettingsClient({
           </div>
         )}
 
-        {/* Commercial Subscription Plans + Multi-App Bundle Discount */}
+        {/* Subscription Plans + Multi-App Bundle Discount */}
         <div className="bg-[#24282B] border border-gray-800 rounded-xl p-6">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
             <div className="flex items-center gap-2.5">
