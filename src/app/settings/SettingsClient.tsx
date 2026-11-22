@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import {
   Building2, Users, UserPlus, Sparkles, Check, Trash2, Shield,
-  CreditCard, Copy, MailCheck, Landmark, MessageSquareText, Clock, AlertTriangle, ShieldCheck
+  CreditCard, Copy, MailCheck, Landmark, MessageSquareText, Clock,
+  AlertTriangle, ShieldCheck, Palette, Sun, Moon
 } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import { createClient } from "../../lib/supabase/client";
@@ -12,31 +13,64 @@ import { startSubscriptionCheckout } from "../../lib/billing";
 const PLANS = [
   {
     id: "agent",
-    name: "CloseFlow Agent",
-    price: "$39",
-    bundlePrice: "$31",
-    period: "/mo",
-    description: "Solo agents managing pipelines, Google Maps listings & AI lead capture.",
-    features: ["14-day free trial included", "Up to 2 team seats", "AI Concierge Qualifier & Capture Pages"],
+    name: "Solo Agent",
+    badge: "14-Day Free Trial",
+    price: "$99",
+    bundlePrice: "$79",
+    period: "/month",
+    description:
+      "Built for independent producing agents to capture leads, run AI qualification, and replace Listings to Leads & Homebot.",
+    features: [
+      "14-day free trial, then $99/mo",
+      "Up to 2 team seats",
+      "Public Property & Home Valuation Capture Pages",
+      "Autonomous AI SMS Qualifier",
+      "Interactive Google Maps Listing Inventory",
+    ],
   },
   {
     id: "team",
-    name: "CloseFlow Team",
-    price: "$99",
-    bundlePrice: "$79",
-    period: "/mo",
-    description: "Growing real estate teams with real-time pipeline sync and lender routing.",
-    features: ["14-day free trial included", "Up to 10 team seats", "Real-Time Sync & Executive Reports"],
+    name: "Pro Team",
+    badge: "Most Popular",
+    price: "$299",
+    bundlePrice: "$239",
+    period: "/month",
+    description:
+      "Real-time multi-user pipeline sync, automated lender warm-transfer routing, and executive brokerage analytics.",
+    features: [
+      "14-day free trial, then $299/mo",
+      "Up to 10 team seats with role permissions",
+      "Real-Time Multi-User Pipeline Sync",
+      "Partner Lender Routing & Warm-Transfer Fallback",
+      "70% Behavioral Intent Scoring & Priority Alerts",
+    ],
   },
   {
     id: "brokerage",
-    name: "CloseFlow Brokerage",
-    price: "$229",
-    bundlePrice: "$183",
-    period: "/mo",
-    description: "Unlimited seats and multi-tenant isolation for full offices.",
-    features: ["14-day free trial included", "Unlimited agent & admin seats", "Priority Onboarding & Support"],
+    name: "White-Label Brokerage",
+    badge: "Unlimited Seats",
+    price: "$599",
+    bundlePrice: "$479",
+    period: "/month",
+    description:
+      "Full white-label workspace with custom Dark/Light mode, brand accent colors, and unlimited seats across your office.",
+    features: [
+      "14-day free trial, then $599/mo",
+      "Unlimited agent & admin seats",
+      "White-Label Custom Theme & Brand Accent Colors",
+      "Isolated Multi-Tenant Workspace Security",
+      "Priority Onboarding & Dedicated Support",
+    ],
   },
+];
+
+const BRAND_SWATCHES = [
+  { label: "CloseFlow Emerald", hex: "#22c55e" },
+  { label: "Royal Blue", hex: "#3b82f6" },
+  { label: "Luxury Gold", hex: "#eab308" },
+  { label: "Crimson Red", hex: "#ef4444" },
+  { label: "Modern Violet", hex: "#8b5cf6" },
+  { label: "Coastal Teal", hex: "#14b8a6" },
 ];
 
 export default function SettingsClient({
@@ -50,6 +84,8 @@ export default function SettingsClient({
   initialSubscriptionStatus,
   initialTrialEndsAt,
   isUnlimited = false,
+  initialThemeMode = "dark",
+  initialBrandColor = "#22c55e",
   initialOpeningScript,
   initialMembers,
   initialInvites,
@@ -65,6 +101,8 @@ export default function SettingsClient({
   initialSubscriptionStatus: string;
   initialTrialEndsAt: string | null;
   isUnlimited?: boolean;
+  initialThemeMode?: string;
+  initialBrandColor?: string;
   initialOpeningScript: string;
   initialMembers: any[];
   initialInvites: any[];
@@ -79,7 +117,6 @@ export default function SettingsClient({
     setPaywallReason(params.get("paywall"));
   }, []);
 
-  // Trial days calculation
   const daysRemaining = initialTrialEndsAt
     ? Math.max(
         0,
@@ -89,8 +126,10 @@ export default function SettingsClient({
       )
     : 0;
 
-  // Workspace Name & AI Script State
+  // Workspace Name, White-Label Branding & AI Script State
   const [workspaceName, setWorkspaceName] = useState(initialWorkspaceName);
+  const [themeMode, setThemeMode] = useState(initialThemeMode || "dark");
+  const [brandColor, setBrandColor] = useState(initialBrandColor || "#22c55e");
   const [openingScript, setOpeningScript] = useState(initialOpeningScript);
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [workspaceSavedMsg, setWorkspaceSavedMsg] = useState("");
@@ -122,6 +161,9 @@ export default function SettingsClient({
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const canCustomizeBranding =
+    isAdmin && (isUnlimited || planTier === "brokerage" || planTier === "enterprise");
+
   const handleSaveWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!workspaceName.trim() || !isAdmin) return;
@@ -132,13 +174,15 @@ export default function SettingsClient({
       .from("tenants")
       .update({
         name: workspaceName.trim(),
+        theme_mode: themeMode,
+        brand_color: brandColor,
         ai_opening_script: openingScript.trim(),
       })
       .eq("id", tenantId);
 
     setIsSavingWorkspace(false);
     if (!error) {
-      setWorkspaceSavedMsg("Workspace & AI Concierge opening script saved");
+      setWorkspaceSavedMsg("Workspace branding, colors & AI opening script saved");
       setTimeout(() => setWorkspaceSavedMsg(""), 3000);
     }
   };
@@ -316,9 +360,9 @@ export default function SettingsClient({
     <AppShell userEmail={userEmail} searchPlaceholder="Settings...">
       <div className="max-w-5xl space-y-6 pb-12">
         <div>
-          <h1 className="text-2xl font-semibold">Workspace, AI & Billing Settings</h1>
+          <h1 className="text-2xl font-semibold">Workspace, White-Label & Billing Settings</h1>
           <p className="text-sm text-gray-400">
-            Manage your CloseFlow subscription, ClearClose AI bundle discount, partner lenders, and AI Concierge scripts
+            Manage your CloseFlow subscription, ClearClose AI bundle discount, white-label brand colors, partner lenders, and AI Concierge scripts
           </p>
         </div>
 
@@ -372,7 +416,7 @@ export default function SettingsClient({
             <div className="flex items-center gap-2.5">
               <CreditCard size={18} className="text-green-400" />
               <div>
-                <h2 className="text-base font-medium">CloseFlow Subscription Plans</h2>
+                <h2 className="text-base font-medium">Plans Built to Scale With Your Deal Volume</h2>
                 <p className="text-xs text-gray-400">
                   Current Tier:{" "}
                   <span className="text-green-400 font-semibold uppercase">
@@ -399,28 +443,36 @@ export default function SettingsClient({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {PLANS.map((plan) => {
               const isCurrent = !isUnlimited && planTier === plan.id && subStatus === "active";
+              const isPopular = plan.id === "team";
               const displayPrice = hasClearCloseAI ? plan.bundlePrice : plan.price;
 
               return (
                 <div
                   key={plan.id}
                   className={`rounded-xl p-5 border flex flex-col justify-between ${
-                    isCurrent
+                    isCurrent || isPopular
                       ? "bg-[#1A1D1F] border-green-500"
                       : "bg-[#111315] border-gray-800"
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="font-semibold text-white">{plan.name}</span>
-                      {isCurrent && (
-                        <span className="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded-full font-medium">
-                          Active
-                        </span>
-                      )}
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                          isCurrent
+                            ? "bg-green-500/20 text-green-400"
+                            : isPopular
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-gray-800 text-gray-300"
+                        }`}
+                      >
+                        {isCurrent ? "Active" : plan.badge}
+                      </span>
                     </div>
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-2xl font-bold text-white">{displayPrice}</span>
+
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <span className="text-3xl font-bold text-white">{displayPrice}</span>
                       <span className="text-xs text-gray-400">{plan.period}</span>
                       {hasClearCloseAI && (
                         <span className="text-xs text-gray-500 line-through">
@@ -428,11 +480,15 @@ export default function SettingsClient({
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400 mb-4">{plan.description}</p>
+                    <p className="text-[11px] text-green-400 font-medium mb-3">
+                      Or {plan.bundlePrice}/mo with ClearClose AI (20% Bundle Savings)
+                    </p>
+
+                    <p className="text-xs text-gray-400 mb-4 leading-relaxed">{plan.description}</p>
                     <ul className="space-y-2 text-xs text-gray-300 mb-5">
                       {plan.features.map((feat) => (
-                        <li key={feat} className="flex items-center gap-2">
-                          <Check size={13} className="text-green-400 shrink-0" />
+                        <li key={feat} className="flex items-start gap-2">
+                          <Check size={13} className="text-green-400 shrink-0 mt-0.5" />
                           <span>{feat}</span>
                         </li>
                       ))}
@@ -443,7 +499,7 @@ export default function SettingsClient({
                     type="button"
                     disabled={!isAdmin || isUnlimited || isCurrent || billingLoading === plan.id}
                     onClick={() => handleSelectPlan(plan.id as any)}
-                    className={`w-full py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    className={`w-full py-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                       isUnlimited || isCurrent
                         ? "bg-gray-800 text-gray-400 cursor-default"
                         : "bg-green-600 hover:bg-green-500 text-white"
@@ -455,7 +511,7 @@ export default function SettingsClient({
                       ? "Connecting..."
                       : isCurrent
                       ? "Current Plan"
-                      : `Subscribe to ${plan.name}`}
+                      : "Start 14-Day Free Trial"}
                   </button>
                 </div>
               );
@@ -478,7 +534,7 @@ export default function SettingsClient({
                     : "bg-gray-800 text-gray-400"
                 }`}
               >
-                {hasClearCloseAI ? "20% Bundle Active" : "Separate App ($79/mo)"}
+                {hasClearCloseAI ? "20% Bundle Active" : "20% Bundle Savings"}
               </span>
             </div>
             <p className="text-xs text-gray-400 max-w-xl">
@@ -500,6 +556,191 @@ export default function SettingsClient({
             {hasClearCloseAI ? "Bundle Linked (20% Off)" : "Link / Add ClearClose AI"}
           </button>
         </div>
+
+        {/* Workspace Profile, White-Label Theme/Color Customizer & AI Opening Script */}
+        <form
+          onSubmit={handleSaveWorkspace}
+          className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <Building2 size={18} className="text-green-400" />
+              <div>
+                <h2 className="text-base font-medium">
+                  Workspace Profile, White-Label Colors & AI Opening Script
+                </h2>
+                <p className="text-xs text-gray-400">
+                  Customize your brokerage name, Dark/Light workspace mode, brand accent colors, and AI Concierge greeting
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] bg-green-500/15 border border-green-500/30 text-green-400 px-2.5 py-1 rounded-full font-medium">
+              White-Label Customization
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Brokerage / Team Name</label>
+            <input
+              type="text"
+              disabled={!isAdmin}
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
+              className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3.5 py-2 text-sm text-white outline-none focus:border-green-500 disabled:opacity-60"
+            />
+          </div>
+
+          {/* White-Label Theme Mode & Brand Accent Color Picker */}
+          <div className="bg-[#1A1D1F] border border-gray-800 rounded-xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
+                <Palette size={15} style={{ color: brandColor }} />
+                <span>White-Label Theme Mode & Brand Accent Color</span>
+              </div>
+              {!canCustomizeBranding && (
+                <span className="text-[11px] text-amber-400">
+                  Available on White-Label Brokerage ($599/mo)
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Dark / Light Mode Toggle */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Workspace Theme Mode</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!canCustomizeBranding}
+                    onClick={() => setThemeMode("dark")}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${
+                      themeMode === "dark"
+                        ? "bg-[#111315] border-green-500 text-white"
+                        : "bg-[#111315]/60 border-gray-800 text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <Moon size={14} />
+                    <span>Dark Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canCustomizeBranding}
+                    onClick={() => setThemeMode("light")}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${
+                      themeMode === "light"
+                        ? "bg-white border-green-500 text-gray-900"
+                        : "bg-[#111315]/60 border-gray-800 text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <Sun size={14} />
+                    <span>Light Mode</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Brand Accent Color Swatches + Custom Hex Picker */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Brand Accent Color</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {BRAND_SWATCHES.map((swatch) => (
+                    <button
+                      key={swatch.hex}
+                      type="button"
+                      disabled={!canCustomizeBranding}
+                      onClick={() => setBrandColor(swatch.hex)}
+                      title={swatch.label}
+                      style={{ backgroundColor: swatch.hex }}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform cursor-pointer disabled:opacity-50 ${
+                        brandColor.toLowerCase() === swatch.hex.toLowerCase()
+                          ? "border-white scale-110"
+                          : "border-transparent opacity-80 hover:opacity-100"
+                      }`}
+                    />
+                  ))}
+                  <div className="flex items-center gap-1.5 bg-[#111315] border border-gray-700 rounded-lg px-2 py-1">
+                    <input
+                      type="color"
+                      disabled={!canCustomizeBranding}
+                      value={brandColor}
+                      onChange={(e) => setBrandColor(e.target.value)}
+                      className="w-5 h-5 bg-transparent border-none cursor-pointer disabled:opacity-50"
+                      aria-label="Custom Brand Color Picker"
+                    />
+                    <input
+                      type="text"
+                      disabled={!canCustomizeBranding}
+                      value={brandColor}
+                      onChange={(e) => setBrandColor(e.target.value)}
+                      className="w-16 bg-transparent text-xs text-gray-200 outline-none uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live White-Label Preview Strip */}
+            <div
+              className={`rounded-lg p-3 border flex items-center justify-between text-xs ${
+                themeMode === "light"
+                  ? "bg-gray-100 border-gray-300 text-gray-900"
+                  : "bg-[#111315] border-gray-800 text-white"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span
+                  style={{ backgroundColor: brandColor }}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-black font-bold text-xs"
+                >
+                  {workspaceName.charAt(0) || "C"}
+                </span>
+                <span className="font-semibold">{workspaceName || "Your Brokerage"}</span>
+                <span className="opacity-60">• Live White-Label Preview</span>
+              </div>
+              <span
+                style={{ backgroundColor: brandColor }}
+                className="text-black font-semibold px-3 py-1 rounded-md text-[11px]"
+              >
+                Primary Accent Button
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-gray-400 flex items-center gap-1.5">
+                <MessageSquareText size={14} className="text-purple-400" />
+                <span>Custom AI Concierge Opening Greeting</span>
+              </label>
+              <span className="text-[11px] text-gray-500">
+                Placeholders: <code>{"{{first_name}}"}</code>, <code>{"{{source_label}}"}</code>
+              </span>
+            </div>
+            <textarea
+              rows={3}
+              disabled={!isAdmin}
+              value={openingScript}
+              onChange={(e) => setOpeningScript(e.target.value)}
+              className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs text-white outline-none focus:border-green-500 disabled:opacity-60 leading-relaxed"
+            />
+          </div>
+
+          {isAdmin && (
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={isSavingWorkspace}
+                className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
+              >
+                {isSavingWorkspace ? "Saving..." : "Save Workspace & Brand Settings"}
+              </button>
+              {workspaceSavedMsg && (
+                <span className="text-xs text-green-400 flex items-center gap-1">
+                  <Check size={14} /> {workspaceSavedMsg}
+                </span>
+              )}
+            </div>
+          )}
+        </form>
 
         {/* Free Partner Lender Network */}
         <div className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-5">
@@ -611,64 +852,6 @@ export default function SettingsClient({
             </div>
           )}
         </div>
-
-        {/* Workspace Profile & Custom AI Concierge Opening Greeting */}
-        <form
-          onSubmit={handleSaveWorkspace}
-          className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-5"
-        >
-          <div className="flex items-center gap-2.5">
-            <Building2 size={18} className="text-green-400" />
-            <h2 className="text-base font-medium">Workspace Profile & AI Opening Script</h2>
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-400 mb-1.5">Brokerage / Team Name</label>
-            <input
-              type="text"
-              disabled={!isAdmin}
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3.5 py-2 text-sm text-white outline-none focus:border-green-500 disabled:opacity-60"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-400 flex items-center gap-1.5">
-                <MessageSquareText size={14} className="text-purple-400" />
-                <span>Custom AI Concierge Opening Greeting</span>
-              </label>
-              <span className="text-[11px] text-gray-500">
-                Placeholders: <code>{"{{first_name}}"}</code>, <code>{"{{source_label}}"}</code>
-              </span>
-            </div>
-            <textarea
-              rows={3}
-              disabled={!isAdmin}
-              value={openingScript}
-              onChange={(e) => setOpeningScript(e.target.value)}
-              className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3.5 py-2.5 text-xs text-white outline-none focus:border-green-500 disabled:opacity-60 leading-relaxed"
-            />
-          </div>
-
-          {isAdmin && (
-            <div className="flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={isSavingWorkspace}
-                className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
-              >
-                {isSavingWorkspace ? "Saving..." : "Save Workspace Settings"}
-              </button>
-              {workspaceSavedMsg && (
-                <span className="text-xs text-green-400 flex items-center gap-1">
-                  <Check size={14} /> {workspaceSavedMsg}
-                </span>
-              )}
-            </div>
-          )}
-        </form>
 
         {/* Invite Team Members */}
         <div className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-6">

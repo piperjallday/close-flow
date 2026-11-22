@@ -12,53 +12,58 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select(
-      "id, email, role, tenant_id, tenants(id, name, has_clearclose_ai, plan_tier, subscription_status, trial_ends_at, is_unlimited, ai_opening_script)"
-    )
+    .select("tenant_id, role")
     .eq("id", user.id)
     .single();
 
-  const tenantData = Array.isArray(profile?.tenants)
-    ? profile?.tenants[0]
-    : profile?.tenants;
+  const tenantId = profile?.tenant_id || "";
+  const currentUserRole = profile?.role || "agent";
 
-  const [{ data: members }, { data: invites }, { data: partnerLenders }] =
-    await Promise.all([
-      supabase
-        .from("users")
-        .select("id, email, role, created_at")
-        .eq("tenant_id", profile?.tenant_id)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("tenant_invites")
-        .select("*")
-        .eq("tenant_id", profile?.tenant_id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("partner_lenders")
-        .select("*")
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    { data: tenant },
+    { data: members },
+    { data: invites },
+    { data: lenders },
+  ] = await Promise.all([
+    supabase.from("tenants").select("*").eq("id", tenantId).single(),
+    supabase
+      .from("users")
+      .select("id, email, role")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("tenant_invites")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("partner_lenders")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true }),
+  ]);
 
   return (
     <SettingsClient
       currentUserId={user.id}
       userEmail={user.email || ""}
-      currentUserRole={profile?.role || "admin"}
-      tenantId={profile?.tenant_id || ""}
-      initialWorkspaceName={tenantData?.name || "CloseFlow Workspace"}
-      initialClearCloseAI={Boolean(tenantData?.has_clearclose_ai)}
-      initialPlanTier={tenantData?.plan_tier || "agent"}
-      initialSubscriptionStatus={tenantData?.subscription_status || "trialing"}
-      initialTrialEndsAt={tenantData?.trial_ends_at || null}
-      isUnlimited={Boolean(tenantData?.is_unlimited)}
+      currentUserRole={currentUserRole}
+      tenantId={tenantId}
+      initialWorkspaceName={tenant?.name || "CloseFlow Workspace"}
+      initialClearCloseAI={Boolean(tenant?.has_clearclose_ai)}
+      initialPlanTier={tenant?.plan_tier || "agent"}
+      initialSubscriptionStatus={tenant?.subscription_status || "trialing"}
+      initialTrialEndsAt={tenant?.trial_ends_at || null}
+      isUnlimited={Boolean(tenant?.is_unlimited)}
+      initialThemeMode={tenant?.theme_mode || "dark"}
+      initialBrandColor={tenant?.brand_color || "#22c55e"}
       initialOpeningScript={
-        tenantData?.ai_opening_script ||
-        "Hi {{first_name}}, thanks for checking out {{source_label}}! Are you looking to make a move in the next 3-6 months?"
+        tenant?.ai_opening_script ||
+        "Hi {{first_name}}, thanks for reaching out about {{source_label}}! Are you looking to buy, sell, or invest in the next 90 days?"
       }
       initialMembers={members || []}
       initialInvites={invites || []}
-      initialLenders={partnerLenders || []}
+      initialLenders={lenders || []}
     />
   );
 }
