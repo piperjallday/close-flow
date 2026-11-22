@@ -4,19 +4,123 @@
   --brand-color: #22c55e;
 }
 
-/* Global White-Label Brand Accent Backgrounds & Borders */
+/* -------------------------------------------------------------------------- */
+/* 1. DYNAMIC WHITE-LABEL THEME ACCENTS (Brand Colors)                        */
+/* -------------------------------------------------------------------------- */
+
 html[data-theme] .bg-green-600,
-html[data-theme] .bg-emerald-600 {
+html[data-theme] .bg-emerald-600,
+.bg-green-500, .bg-green-600 {
   background-color: var(--brand-color) !important;
   color: #ffffff !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
+
 html[data-theme] .hover\:bg-green-500:hover,
 html[data-theme] .hover\:bg-emerald-500:hover {
   filter: brightness(1.08);
 }
 
-/* Eliminate ALL lime/green/emerald text so every label & button is crisp and readable */
+/* Force Text Accents to Brand Color */
+.text-green-400, .text-green-500, .text-green-600 {
+  color: var(--brand-color) !important;
+}
+
+/* Translucent Backgrounds (Badges & Kanban) */
+html[data-theme] .bg-green-500\/10, .bg-green-500\/10 { background-color: color-mix(in srgb, var(--brand-color) 10%, transparent) !important; }
+html[data-theme] .bg-green-500\/15, .bg-green-500\/15, .bg-green-600\/15, .bg-emerald-500\/15 { background-color: color-mix(in srgb, var(--brand-color) 15%, transparent) !important; }
+html[data-theme] .bg-green-500\/20, .bg-green-500\/20, .bg-green-600\/20 { background-color: color-mix(in srgb, var(--brand-color) 20%, transparent) !important; }
+
+/* Borders */
+html[data-theme] .border-green-500, .border-green-500, .focus\:border-green-500:focus { border-color: var(--brand-color) !important; }
+html[data-theme] .border-green-500\/30, .border-green-500\/30, .border-emerald-500\/30 { border-color: color-mix(in srgb, var(--brand-color) 30%, transparent) !important; }
+html[data-theme] .border-green-500\/40, .border-green-500\/40 { border-color: color-mix(in srgb, var(--brand-color) 40%, transparent) !important; }
+html[data-theme] .border-green-500\/60, .border-green-500\/60 { border-color: color-mix(in srgb, var(--brand-color) 60%, transparent) !important; }
+
+
+/* -------------------------------------------------------------------------- */
+/* 2. TREMOR CHARTS (Reports & Dashboard)                                     */
+/* -------------------------------------------------------------------------- */
+
+.recharts-bar-rectangle path,
+.recharts-pie-sector:first-child path {
+  fill: var(--brand-color) !important;
+  stroke: var(--brand-color) !important;
+}
+.recharts-area-line { stroke: var(--brand-color) !important; }
+.recharts-area-area { fill: var(--brand-color) !important; fill-opacity: 0.25 !important; }
+.stroke-green-500, .stroke-emerald-500 { stroke: var(--brand-color) !important; }
+.fill-green-500, .fill-emerald-500 { fill: var(--brand-color) !important; }
+
+
+/* -------------------------------------------------------------------------- */
+/* 3. LIGHT MODE OVERRIDES (Map Overlays, Pills, & Controls)                  */
+/* -------------------------------------------------------------------------- */
+
+/* Force Browser UI & Google Maps to Light Mode Native */
+html[data-theme="light"] {
+  color-scheme: light !important;
+}
+
+/* Force App Backgrounds */
+html[data-theme="light"] body,
+html[data-theme="light"] .bg-\[\#111315\],
+html[data-theme="light"] [class*="bg-[#111315]"] {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .bg-\[\#1A1D1F\],
+html[data-theme="light"] .bg-\[\#14171A\],
+html[data-theme="light"] [class*="bg-[#1A1D1F]"],
+html[data-theme="light"] [class*="bg-[#14171A]"] {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+
+/* Force Cards, Modals, Map Overlays, & ACTION BUTTONS to White */
+html[data-theme="light"] .bg-\[\#24282B\],
+html[data-theme="light"] .bg-\[\#2A2E32\],
+html[data-theme="light"] [class*="bg-[#24282B]"],
+html[data-theme="light"] [class*="bg-[#2A2E32]"],
+html[data-theme="light"] [class*="bg-gray-900"],
+html[data-theme="light"] [class*="bg-gray-800"],
+html[data-theme="light"] [class*="bg-black"],
+html[data-theme="light"] .map-overlay-card {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Force Borders to Light Gray */
+html[data-theme="light"] .border-gray-800,
+html[data-theme="light"] .border-gray-700,
+html[data-theme="light"] [class*="border-gray-800"],
+html[data-theme="light"] [class*="border-gray-700"],
+html[data-theme="light"] .divide-gray-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e5e7eb !important;
+}
+
+/* Force Light Mode Text Scaling */
+html[data-theme="light"] .text-white,
+html[data-theme="light"] .text-gray-100,
+html[data-theme="light"] .text-gray-200,
+html[data-theme="light"] [class*="text-gray-100"],
+html[data-theme="light"] [class*="text-gray-200"] {
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .text-gray-300,
+html[data-theme="light"] [class*="text-gray-300"] {
+  color: #374151 !important;
+}
+
+html[data-theme="light"] .text-gray-400,
+html[data-theme="light"] .text-gray-500,
+html[data-theme="light"] [class*="text-gray-400"] {
+  color: #6b7280 !important;
+}
+
+/* Remove rogue bright-green text in Dark Mode */
 html[data-theme="dark"] .text-green-300,
 html[data-theme="dark"] .text-green-400,
 html[data-theme="dark"] .text-green-500,
@@ -27,75 +131,7 @@ html[data-theme="dark"] .text-lime-400 {
   color: #f9fafb !important;
 }
 
-html[data-theme="light"] .text-green-300,
-html[data-theme="light"] .text-green-400,
-html[data-theme="light"] .text-green-500,
-html[data-theme="light"] .text-green-600,
-html[data-theme="light"] .text-emerald-300,
-html[data-theme="light"] .text-emerald-400,
-html[data-theme="light"] .text-emerald-500,
-html[data-theme="light"] .text-lime-400 {
-  color: #111827 !important;
-}
-
-html[data-theme] .border-green-500,
-html[data-theme] .border-green-500\/30,
-html[data-theme] .border-green-500\/40,
-html[data-theme] .border-green-500\/60,
-html[data-theme] .border-emerald-500\/30 {
-  border-color: var(--brand-color) !important;
-}
-
-html[data-theme] .bg-green-500\/10,
-html[data-theme] .bg-green-500\/15,
-html[data-theme] .bg-green-500\/20,
-html[data-theme] .bg-green-600\/15,
-html[data-theme] .bg-green-600\/20,
-html[data-theme] .bg-emerald-500\/15 {
-  background-color: color-mix(in srgb, var(--brand-color) 18%, transparent) !important;
-}
-
-/* Global Light Mode Theme Overrides Across All Pages */
-html[data-theme="light"] body,
-html[data-theme="light"] .bg-\[\#111315\] {
-  background-color: #f3f4f6 !important;
-  color: #111827 !important;
-}
-
-html[data-theme="light"] .bg-\[\#1A1D1F\],
-html[data-theme="light"] .bg-\[\#14171A\] {
-  background-color: #f9fafb !important;
-  color: #111827 !important;
-}
-
-html[data-theme="light"] .bg-\[\#24282B\],
-html[data-theme="light"] .bg-\[\#2A2E32\] {
-  background-color: #ffffff !important;
-  color: #111827 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-}
-
-html[data-theme="light"] .border-gray-800,
-html[data-theme="light"] .border-gray-700,
-html[data-theme="light"] .divide-gray-800 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #e5e7eb !important;
-}
-
-html[data-theme="light"] .text-white,
-html[data-theme="light"] .text-gray-100,
-html[data-theme="light"] .text-gray-200 {
-  color: #111827 !important;
-}
-
-html[data-theme="light"] .text-gray-300 {
-  color: #374151 !important;
-}
-
-html[data-theme="light"] .text-gray-400,
-html[data-theme="light"] .text-gray-500 {
-  color: #6b7280 !important;
-}
-
+/* Input Fields */
 html[data-theme="light"] input,
 html[data-theme="light"] select,
 html[data-theme="light"] textarea {
@@ -104,105 +140,21 @@ html[data-theme="light"] textarea {
   border-color: #d1d5db !important;
 }
 
+/* Keep Primary Buttons White Text */
 html[data-theme="light"] button.bg-green-600,
 html[data-theme="light"] a.bg-green-600 {
   color: #ffffff !important;
 }
-/* Fix Map Overlay Card Contrast in Light & Dark Modes */
-html[data-theme="light"] .map-overlay-card,
-html[data-theme="light"] [class*="bg-black/8"],
-html[data-theme="light"] [class*="bg-black/9"] {
-  background-color: rgba(255, 255, 255, 0.96) !important;
-  color: #111827 !important;
-  border: 1px solid #d1d5db !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
-}
-/* -------------------------------------------------------------------------- */
-/* DYNAMIC WHITE-LABEL THEME OVERRIDES (Listings, Reports, & Highlights)      */
-/* -------------------------------------------------------------------------- */
 
-/* 1. Global Text & Solid Backgrounds */
-.text-green-400, .text-green-500, .text-green-600 {
-  color: var(--brand-color) !important;
-}
-
-.bg-green-500, .bg-green-600 {
-  background-color: var(--brand-color) !important;
-  color: #ffffff !important;
-}
-
-/* 2. Translucent Highlights (Active Nav, Badges, Kanban Stages) */
-.bg-green-500\/10 { background-color: color-mix(in srgb, var(--brand-color) 10%, transparent) !important; }
-.bg-green-500\/15 { background-color: color-mix(in srgb, var(--brand-color) 15%, transparent) !important; }
-.bg-green-500\/20, .bg-green-600\/20 { background-color: color-mix(in srgb, var(--brand-color) 20%, transparent) !important; }
-
-/* 3. Borders (Active Nav, Input Focus, Map Pills) */
-.border-green-500 { border-color: var(--brand-color) !important; }
-.border-green-500\/30 { border-color: color-mix(in srgb, var(--brand-color) 30%, transparent) !important; }
-.border-green-500\/40 { border-color: color-mix(in srgb, var(--brand-color) 40%, transparent) !important; }
-.border-green-500\/60 { border-color: color-mix(in srgb, var(--brand-color) 60%, transparent) !important; }
-.focus\:border-green-500:focus { border-color: var(--brand-color) !important; }
-
-/* 4. Tremor Charts (/reports and /dashboard) */
-.recharts-bar-rectangle path,
-.recharts-pie-sector:first-child path {
-  fill: var(--brand-color) !important;
-  stroke: var(--brand-color) !important;
-}
-
-.recharts-area-line {
-  stroke: var(--brand-color) !important;
-}
-
-.recharts-area-area {
-  fill: var(--brand-color) !important;
-  fill-opacity: 0.25 !important;
-}
-
-/* Catch Tremor's internal Tailwind SVG injections */
-.stroke-green-500, .stroke-emerald-500 { stroke: var(--brand-color) !important; }
-.fill-green-500, .fill-emerald-500 { fill: var(--brand-color) !important; }
-/* -------------------------------------------------------------------------- */
-/* BULLETPROOF LIGHT MODE HEX OVERRIDES (Map Overlays, Pills, & Controls)     */
-/* -------------------------------------------------------------------------- */
-
-/* Force all hardcoded dark background classes to white in Light Mode */
-html:not(.dark) [class*="bg-[#111315]"],
-html:not(.dark) [class*="bg-[#1A1D1F]"],
-html:not(.dark) [class*="bg-[#24282B]"],
-html:not(.dark) [class*="bg-[#2A2E32]"],
-html:not(.dark) [class*="bg-black"] {
+/* Fix Google Maps Controls (Map/Satellite Toggles) */
+html[data-theme="light"] .gm-style-iw,
+html[data-theme="light"] .gm-style-iw-c,
+html[data-theme="light"] .gm-style .gm-style-mtc button,
+html[data-theme="light"] .gm-control-active {
   background-color: #ffffff !important;
   color: #111827 !important;
 }
-
-/* Force dark borders to light gray */
-html:not(.dark) [class*="border-gray-700"],
-html:not(.dark) [class*="border-gray-800"] {
-  border-color: #e5e7eb !important;
-}
-
-/* Force dark gray text to readable dark charcoal */
-html:not(.dark) [class*="text-gray-100"],
-html:not(.dark) [class*="text-gray-200"],
-html:not(.dark) [class*="text-gray-300"] {
-  color: #111827 !important;
-}
-
-html:not(.dark) [class*="text-gray-400"] {
-  color: #4b5563 !important;
-}
-
-/* Fix Google Maps Native Controls (Map/Satellite toggle) & Info Windows */
-html:not(.dark) .gm-style-iw,
-html:not(.dark) .gm-style-iw-c,
-html:not(.dark) .gm-style .gm-style-mtc button,
-html:not(.dark) .gm-control-active {
-  background-color: #ffffff !important;
-  color: #111827 !important;
-}
-
-html:not(.dark) .gm-style-iw-d,
-html:not(.dark) .gm-style .gm-style-mtc button {
+html[data-theme="light"] .gm-style-iw-d,
+html[data-theme="light"] .gm-style .gm-style-mtc button {
   color: #111827 !important;
 }
