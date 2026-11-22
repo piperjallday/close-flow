@@ -44,6 +44,7 @@ export default function AppShell({
   const supabase = useMemo(() => createClient(), []);
 
   const [workspaceName, setWorkspaceName] = useState("CloseFlow");
+  const [activeTenantId, setActiveTenantId] = useState<string>("");
   const [notifications, setNotifications] = useState<
     Array<{ id: string; title: string; detail: string; time: string; unread: boolean }>
   >([]);
@@ -71,6 +72,7 @@ export default function AppShell({
 
       const tenantId = profile?.tenant_id;
       if (!tenantId) return;
+      setActiveTenantId(tenantId);
 
       const { data: tenant } = await supabase
         .from("tenants")
@@ -79,26 +81,37 @@ export default function AppShell({
         .single();
       if (tenant?.name) setWorkspaceName(tenant.name);
 
-      // Load recent leads as initial bell feed so bell is synced on every page
+      const clearedAt =
+        localStorage.getItem(`closeflow_alerts_cleared_${tenantId}`) || "";
+
+      // Load recent leads using the same timestamp logic as DashboardClient
       const { data: recentLeads } = await supabase
         .from("leads")
-        .select("id, full_name, source, created_at")
+        .select("id, full_name, source, created_at, last_contacted_at")
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false })
-        .limit(8);
+        .limit(20);
 
       if (recentLeads) {
         setNotifications(
-          recentLeads.map((l, idx) => ({
-            id: l.id,
-            title: `New Lead: ${l.full_name || "Prospect"}`,
-            detail: `Captured via ${l.source || "Direct"}`,
-            time: new Date(l.created_at).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            unread: idx === 0,
-          }))
+          recentLeads.map((l) => {
+            const itemTime = new Date(
+              l.last_contacted_at || l.created_at || 0
+            ).getTime();
+            const isUnread =
+              !clearedAt || itemTime > new Date(clearedAt).getTime();
+
+            return {
+              id: l.id,
+              title: `New Lead: ${l.full_name || "Prospect"}`,
+              detail: `Captured via ${l.source || "Direct"}`,
+              time: new Date(l.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              unread: isUnread,
+            };
+          })
         );
       }
 
@@ -129,7 +142,7 @@ export default function AppShell({
               unread: true,
             };
 
-            setNotifications((prev) => [alertItem, ...prev.slice(0, 14)]);
+            setNotifications((prev) => [alertItem, ...prev.slice(0, 19)]);
             setInstantAlert({
               id: alertItem.id,
               name: lead.full_name || "New Prospect",
@@ -147,12 +160,20 @@ export default function AppShell({
     };
   }, [supabase]);
 
-const unreadCount = Math.max(
-  notifications.filter((n) => n.unread).length,
-  notificationCount || 0
-);
+  const unreadCount = Math.max(
+    notifications.filter((n) => n.unread).length,
+    notificationCount || 0
+  );
+
   const handleOpenBell = () => {
     setBellOpen((prev) => !prev);
+  };
+
+  const handleClearAllAlerts = () => {
+    const nowIso = new Date().toISOString();
+    if (activeTenantId) {
+      localStorage.setItem(`closeflow_alerts_cleared_${activeTenantId}`, nowIso);
+    }
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
@@ -231,12 +252,12 @@ const unreadCount = Math.max(
               className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500"
             />
             <input
-  type="text"
-  value={searchValue ?? searchQuery ?? ""}
-  onChange={(e) => onSearchChange?.(e.target.value)}
-  placeholder={searchPlaceholder}
-  className="w-full bg-[#111315] border border-gray-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white outline-none focus:border-green-500"
-/>
+              type="text"
+              value={searchValue ?? searchQuery ?? ""}
+              onChange={(e) => onSearchChange?.(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full bg-[#111315] border border-gray-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white outline-none focus:border-green-500"
+            />
           </div>
 
           <div className="flex items-center gap-3">
@@ -252,7 +273,7 @@ const unreadCount = Math.max(
               >
                 <Bell size={17} />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center">
                     {unreadCount}
                   </span>
                 )}
@@ -264,13 +285,24 @@ const unreadCount = Math.max(
                     <span className="text-xs font-semibold text-white">
                       Live Lead & Form Alerts
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setBellOpen(false)}
-                      className="text-gray-400 hover:text-white cursor-pointer"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {unreadCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClearAllAlerts}
+                          className="text-[11px] text-green-400 hover:underline cursor-pointer"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setBellOpen(false)}
+                        className="text-gray-400 hover:text-white cursor-pointer"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
                   <div className="max-h-72 overflow-y-auto divide-y divide-gray-800">
                     {notifications.length === 0 ? (
@@ -312,7 +344,7 @@ const unreadCount = Math.max(
 
         {/* Instant New Lead / Form Submission Toast Banner (Shows on ANY Page) */}
         {instantAlert && (
-          <div className="fixed bottom-5 right-5 z-50 bg-[#24282B] border border-green-500 rounded-2xl p-4 shadow-2xl max-w-sm flex items-start gap-3 animate-bounce">
+          <div className="fixed bottom-5 right-5 z-50 bg-[#24282B] border border-green-500 rounded-2xl p-4 shadow-2xl max-w-sm flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-green-600 text-white flex items-center justify-center shrink-0">
               <Sparkles size={18} />
             </div>

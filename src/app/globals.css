@@ -108,3 +108,12 @@ html[data-theme="light"] button.bg-green-600,
 html[data-theme="light"] a.bg-green-600 {
   color: #ffffff !important;
 }
+/* Fix Map Overlay Card Contrast in Light & Dark Modes */
+html[data-theme="light"] .map-overlay-card,
+html[data-theme="light"] [class*="bg-black/8"],
+html[data-theme="light"] [class*="bg-black/9"] {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  color: #111827 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
