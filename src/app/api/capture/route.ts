@@ -24,16 +24,25 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { error: "Database configuration missing in environment variables." },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     let resolvedTenantId = String(rawTenantId || "").trim();
 
     // 1. If tenantId wasn't passed, resolve it from the listing record
     if (!resolvedTenantId && listingId) {
-      const { data: listingRow } = await adminSupabase
+      const { data: listingRow } = await supabase
         .from("listings")
         .select("tenant_id")
         .eq("id", listingId)
@@ -43,9 +52,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Fallback to primary workspace if still empty (e.g. legacy listing with null tenant_id)
+    // 2. Fallback to primary workspace if still empty
     if (!resolvedTenantId) {
-      const { data: primaryTenant } = await adminSupabase
+      const { data: primaryTenant } = await supabase
         .from("tenants")
         .select("id")
         .order("is_unlimited", { ascending: false })
@@ -57,15 +66,14 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: tenant } = await adminSupabase
+    const { data: tenant } = await supabase
       .from("tenants")
       .select("id, name, twilio_phone_number, ai_opening_script")
       .eq("id", resolvedTenantId)
       .single();
 
-    if (!tenant) {
-      return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
-    }
+    const workspaceName = tenant?.name || "CloseFlow Real Estate";
+    const targetTenantId = tenant?.id || resolvedTenantId || null;
 
     const now = new Date().toISOString();
     const initialContext = propertyAddress
@@ -81,7 +89,7 @@ export async function POST(request: Request) {
     ];
 
     const concierge = await runAiConcierge({
-      workspaceName: tenant.name || "CloseFlow Real Estate",
+      workspaceName,
       leadName: fullName.trim().split(" ")[0],
       history: initialHistory,
       existingData: {
@@ -100,11 +108,11 @@ export async function POST(request: Request) {
       },
     ];
 
-    const { data: createdLead, error: leadError } = await adminSupabase
+    const { data: createdLead, error: leadError } = await supabase
       .from("leads")
       .insert([
         {
-          tenant_id: tenant.id,
+          ...(targetTenantId ? { tenant_id: targetTenantId } : {}),
           full_name: fullName.trim(),
           email: email?.trim() || null,
           phone: phone?.trim() || null,
@@ -130,7 +138,7 @@ export async function POST(request: Request) {
     const cleanPhone = String(phone || "").trim();
     if (
       cleanPhone &&
-      tenant.twilio_phone_number &&
+      tenant?.twilio_phone_number &&
       process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_AUTH_TOKEN
     ) {
@@ -150,21 +158,23 @@ export async function POST(request: Request) {
       }).catch((err) => console.error("Twilio outbound welcome failed:", err));
     }
 
-    const { data: activeWorkflows } = await adminSupabase
-      .from("workflows")
-      .select("id, triggers_count")
-      .eq("tenant_id", tenant.id)
-      .eq("status", "Active");
+    if (targetTenantId) {
+      const { data: activeWorkflows } = await supabase
+        .from("workflows")
+        .select("id, triggers_count")
+        .eq("tenant_id", targetTenantId)
+        .eq("status", "Active");
 
-    if (activeWorkflows && activeWorkflows.length > 0) {
-      await Promise.all(
-        activeWorkflows.map((wf) =>
-          adminSupabase
-            .from("workflows")
-            .update({ triggers_count: Number(wf.triggers_count || 0) + 1 })
-            .eq("id", wf.id)
-        )
-      );
+      if (activeWorkflows && activeWorkflows.length > 0) {
+        await Promise.all(
+          activeWorkflows.map((wf) =>
+            supabase
+              .from("workflows")
+              .update({ triggers_count: Number(wf.triggers_count || 0) + 1 })
+              .eq("id", wf.id)
+          )
+        );
+      }
     }
 
     return NextResponse.json({
