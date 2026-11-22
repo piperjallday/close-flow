@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const fullTranscript = [
       ...history.map((m: any) => m.content || ""),
       message,
-      lead?.source || "",
+      lead?.lead_source || lead?.source || "",
       lead?.notes || "",
     ]
       .join(" ")
@@ -67,15 +67,22 @@ export async function POST(request: Request) {
     else if (isSeller) roleTag = "Seller";
     else if (isBuyer) roleTag = "Buyer";
 
-    // Calculate qualification intent score
-    let score = Number(lead?.intent_score || 25);
-    if (roleTag !== "Unclassified") score = Math.max(score, 45);
-    if (/30 days|60 days|90 days|asap|this month|next month|soon|ready/.test(fullTranscript)) {
-      score = Math.max(score, 70);
+    // Calculate LPMAMA qualification score (0-100)
+    let score = Number(lead?.qualification_score ?? lead?.intent_score ?? 25);
+    if (roleTag !== "Unclassified") score = Math.max(score, 50);
+    if (/30 days|60 days|90 days|asap|this month|next month|soon|ready|weekend|tomorrow/.test(fullTranscript)) {
+      score = Math.max(score, 72);
     }
-    if (/pre-approv|preapprov|cash|lender|budget|\$[0-9]{3}|address|tour|schedule/.test(fullTranscript)) {
+    if (/pre-approv|preapprov|cash|lender|budget|\$[0-9]{3}|address|tour|showing|schedule|offer/.test(fullTranscript)) {
       score = Math.max(score, 85);
     }
+
+    const wantsTour = /tour|showing|see the home|walk through|schedule|appointment|saturday|sunday|tomorrow/.test(
+      message.toLowerCase()
+    );
+    const wantsOffer = /write an offer|make an offer|submit an offer|put in an offer/.test(
+      message.toLowerCase()
+    );
 
     const needsLenderWarmTransfer =
       isBuyer &&
@@ -88,7 +95,7 @@ export async function POST(request: Request) {
     if (process.env.OPENAI_API_KEY) {
       const systemPrompt = `You are the AI Real Estate Concierge for ${workspaceName}.
 Lead Name: ${lead?.full_name || "Prospect"}
-Lead Source: ${lead?.source || "Direct"}
+Lead Source: ${lead?.lead_source || lead?.source || "Direct"}
 Detected Role: ${roleTag}
 Partner Lender Available: ${
         partnerLender
@@ -126,7 +133,6 @@ Your job is to have a clear, concise, friendly SMS-style conversation (2-3 short
       aiReply = openaiData?.choices?.[0]?.message?.content?.trim() || "";
     }
 
-    // Deterministic high-clarity fallback if OPENAI_API_KEY is absent
     if (!aiReply) {
       const firstName = (lead?.full_name || "there").split(" ")[0];
       if (roleTag === "Unclassified") {
@@ -136,34 +142,47 @@ Your job is to have a clear, concise, friendly SMS-style conversation (2-3 short
       } else if (roleTag.includes("Seller")) {
         aiReply = `Great—I'd love to help with your sale, ${firstName}. What is the property address and your ideal timeline for listing?`;
       } else {
-        aiReply = `Awesome, ${firstName}! To match you with the best homes, what is your target timeline to move and have you already been pre-approved with a lender?`;
+        aiReply = `Awesome, ${firstName}! To match you with the best homes and lock in tour times, what is your target timeline to move and have you already been pre-approved with a lender?`;
       }
     }
 
-    // Persist updated Buyer/Seller classification, intent score, and status
-    const existingTags = String(lead?.tags || "")
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t && !["Buyer", "Seller", "Buyer + Seller", "Unclassified"].includes(t));
-
-    if (roleTag !== "Unclassified") {
-      existingTags.unshift(roleTag);
+    // Auto-advance Kanban stage based on qualification milestones
+    let nextStatus = lead?.status || "New Leads";
+    if (wantsOffer && nextStatus !== "Closed Deals") {
+      nextStatus = "Fav Offers";
+    } else if ((wantsTour || score >= 80) && (nextStatus === "New Leads" || nextStatus === "Contacted")) {
+      nextStatus = "Property Tours";
+    } else if (nextStatus === "New Leads") {
+      nextStatus = "Contacted";
     }
+
+    const updatedHistory = [
+      ...history,
+      { role: "user", content: message, timestamp: new Date().toISOString() },
+      { role: "assistant", content: aiReply, timestamp: new Date().toISOString() },
+    ];
+
+    const summaryNote = `${roleTag} (${score}% qualified) • Latest: "${message.slice(0, 90)}"`;
 
     await supabase
       .from("leads")
       .update({
-        tags: existingTags.join(", "),
+        tag: roleTag !== "Unclassified" ? roleTag : lead?.tag,
+        qualification_score: score,
         intent_score: score,
-        status:
-          lead?.status === "New Leads" && score >= 70 ? "Contacted" : lead?.status,
+        status: nextStatus,
+        conversation_history: updatedHistory,
+        notes: summaryNote,
+        last_contacted_at: new Date().toISOString(),
       })
       .eq("id", leadId);
 
     return NextResponse.json({
       reply: aiReply,
       classification: roleTag,
+      qualification_score: score,
       intent_score: score,
+      status: nextStatus,
       lenderRouted: needsLenderWarmTransfer,
     });
   } catch (err: unknown) {

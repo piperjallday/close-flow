@@ -22,7 +22,6 @@ export async function POST(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Load workspace info
     const { data: tenant } = await supabase
       .from("tenants")
       .select("id, name, twilio_phone_number")
@@ -31,7 +30,6 @@ export async function POST(request: Request) {
 
     const workspaceName = tenant?.name || "CloseFlow Real Estate";
 
-    // 2. Load target lead (if provided)
     let lead: any = null;
     if (leadId) {
       const { data: leadRow } = await supabase
@@ -42,7 +40,6 @@ export async function POST(request: Request) {
       lead = leadRow;
     }
 
-    // 3. Find matching Active workflows (either by specific workflowId or by trigger_stage)
     let wfQuery = supabase
       .from("workflows")
       .select("*")
@@ -63,28 +60,45 @@ export async function POST(request: Request) {
 
     const firstName = (lead?.full_name || lead?.name || "there").split(" ")[0];
     const cleanPhone = String(lead?.phone || "").trim();
+    const cleanEmail = String(lead?.email || "").trim();
     const createdLogs: any[] = [];
 
     for (const wf of matchingWorkflows) {
-      const steps: DripStep[] = Array.isArray(wf.steps) && wf.steps.length > 0
-        ? wf.steps
-        : [
-            {
-              day: 0,
-              channel: "SMS",
-              delay_label: "Instant (0m)",
-              message: `Hi ${firstName}, thanks for connecting with ${workspaceName}! How can our team help you today?`,
-            },
-          ];
+      // Idempotency guard: prevent duplicate fire on same lead+workflow within 10 minutes
+      if (lead?.id) {
+        const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const { data: recentDup } = await supabase
+          .from("workflow_logs")
+          .select("id")
+          .eq("workflow_id", wf.id)
+          .eq("lead_id", lead.id)
+          .gte("created_at", tenMinsAgo)
+          .limit(1);
+
+        if (recentDup && recentDup.length > 0) {
+          continue;
+        }
+      }
+
+      const steps: DripStep[] =
+        Array.isArray(wf.steps) && wf.steps.length > 0
+          ? wf.steps
+          : [
+              {
+                day: 0,
+                channel: "SMS",
+                delay_label: "Instant (0m)",
+                message: `Hi ${firstName}, thanks for connecting with ${workspaceName}! How can our team help you today?`,
+              },
+            ];
 
       const stepOne = steps[0];
       const renderedMessage = stepOne.message
         .replace(/\{\{first_name\}\}/gi, firstName)
         .replace(/\{\{workspace_name\}\}/gi, workspaceName);
 
-      let deliveryStatus = "queued";
+      let deliveryStatus = "simulated_sent";
 
-      // Dispatch immediate SMS if Step 1 is SMS and Twilio is configured
       if (
         stepOne.channel === "SMS" &&
         cleanPhone &&
@@ -110,13 +124,30 @@ export async function POST(request: Request) {
           }
         );
         deliveryStatus = twilioRes.ok ? "sent_sms" : "sms_failed";
-      } else if (stepOne.channel === "Email" && lead?.email) {
+      } else if (stepOne.channel === "Email" && cleanEmail && process.env.RESEND_API_KEY) {
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from:
+              process.env.RESEND_FROM_EMAIL ||
+              `${workspaceName} <onboarding@resend.dev>`,
+            to: [cleanEmail],
+            subject: `${wf.title} — ${workspaceName}`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#111827;line-height:1.6;">
+              <p>${renderedMessage}</p>
+              <p style="font-size:12px;color:#6b7280;margin-top:20px;">— ${workspaceName}</p>
+            </div>`,
+          }),
+        });
+        deliveryStatus = resendRes.ok ? "sent_email" : "email_failed";
+      } else if (stepOne.channel === "Email" && cleanEmail) {
         deliveryStatus = "queued_email";
-      } else {
-        deliveryStatus = "simulated_sent";
       }
 
-      // Log execution in workflow_logs
       const { data: logEntry } = await supabase
         .from("workflow_logs")
         .insert([
@@ -136,7 +167,6 @@ export async function POST(request: Request) {
 
       if (logEntry) createdLogs.push(logEntry);
 
-      // Increment workflow triggers_count
       await supabase
         .from("workflows")
         .update({ triggers_count: Number(wf.triggers_count || 0) + 1 })
@@ -144,7 +174,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      triggered: matchingWorkflows.length,
+      triggered: createdLogs.length,
       logs: createdLogs,
     });
   } catch (err: unknown) {

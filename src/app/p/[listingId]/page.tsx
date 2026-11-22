@@ -3,26 +3,38 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import {
-  Building2, MapPin, CheckCircle2, Sparkles, ArrowRight, ShieldCheck, Maximize2
+  Building2, MapPin, CheckCircle2, Sparkles, ArrowRight, ShieldCheck, Maximize2, Send
 } from "lucide-react";
 import { createClient } from "../../../lib/supabase/client";
 
 export default function PublicPropertyLandingPage() {
   const params = useParams();
-  const listingId = String(params?.listingID || params?.id || "");
+  const listingId = String(params?.listingId || params?.listingID || params?.id || "");
   const supabase = createClient();
 
   const [listing, setListing] = useState<any | null>(null);
   const [brokerageName, setBrokerageName] = useState("CloseFlow Real Estate");
   const [loading, setLoading] = useState(true);
 
+  // Step 1 Quick Qualification Pills (Low-Friction Micro-Commitment)
+  const [moveTimeline, setMoveTimeline] = useState("Within 30–60 days");
+  const [preApproved, setPreApproved] = useState("Yes, Pre-Approved");
+
+  // Step 2 Contact Info
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [inquiryNotes, setInquiryNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [submittedReply, setSubmittedReply] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  // Post-Submit Live AI Concierge Chat State
+  const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
+  const [chatHistory, setChatHistory] = useState<
+    Array<{ role: "user" | "assistant"; content: string }>
+  >([]);
+  const [chatInput, setChatInput] = useState("");
+  const [sendingChat, setSendingChat] = useState(false);
 
   useEffect(() => {
     async function fetchListing() {
@@ -53,6 +65,10 @@ export default function PublicPropertyLandingPage() {
     setSubmitting(true);
     setError("");
 
+    const combinedNotes = `Timeline: ${moveTimeline} | Financing: ${preApproved}${
+      inquiryNotes.trim() ? ` | Notes: ${inquiryNotes.trim()}` : ""
+    }`;
+
     try {
       const res = await fetch("/api/capture", {
         method: "POST",
@@ -66,18 +82,58 @@ export default function PublicPropertyLandingPage() {
           sourceType: "Property Capture",
           propertyAddress: listing.address,
           estimatedValue: listing.price,
-          inquiryNotes,
+          inquiryNotes: combinedNotes,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to submit request");
 
-      setSubmittedReply(data.conciergeReply);
+      setCreatedLeadId(data.leadId || null);
+      setChatHistory([
+        {
+          role: "assistant",
+          content:
+            data.conciergeReply ||
+            `Thanks ${fullName.split(" ")[0]}! When would you like to tour ${listing.address}?`,
+        },
+      ]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSendChat = async (quickText?: string) => {
+    const msg = (quickText ?? chatInput).trim();
+    if (!msg || !createdLeadId || sendingChat) return;
+
+    const nextHistory = [...chatHistory, { role: "user" as const, content: msg }];
+    setChatHistory(nextHistory);
+    setChatInput("");
+    setSendingChat(true);
+
+    try {
+      const res = await fetch("/api/concierge/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: createdLeadId,
+          tenantId: listing?.tenant_id || "",
+          message: msg,
+          history: nextHistory,
+        }),
+      });
+      const data = await res.json();
+      if (data.reply) {
+        setChatHistory((prev) => [
+          ...prev,
+          { role: "assistant", content: data.reply },
+        ]);
+      }
+    } finally {
+      setSendingChat(false);
     }
   };
 
@@ -103,12 +159,12 @@ export default function PublicPropertyLandingPage() {
       {/* Top Bar */}
       <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between max-w-6xl w-full mx-auto">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-green-500 text-black font-bold flex items-center justify-center">
-            C
+          <div className="w-8 h-8 rounded-full bg-green-600 text-white font-bold flex items-center justify-center">
+            {brokerageName.charAt(0)}
           </div>
           <span className="font-semibold tracking-wide">{brokerageName}</span>
         </div>
-        <span className="text-xs bg-green-500/15 border border-green-500/30 text-green-400 px-3 py-1 rounded-full font-medium">
+        <span className="text-xs bg-green-500/15 border border-green-500/30 text-gray-100 px-3 py-1 rounded-full font-medium">
           {listing.status || "Available"}
         </span>
       </header>
@@ -117,7 +173,7 @@ export default function PublicPropertyLandingPage() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
         {/* Left: Property Hero + Highlights */}
         <div className="lg:col-span-7 space-y-6">
-          {listing.image_url && (
+          {listing.image_url ? (
             <div className="relative rounded-2xl overflow-hidden border border-gray-800 bg-[#1A1D1F] aspect-video">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -125,14 +181,12 @@ export default function PublicPropertyLandingPage() {
                 alt={listing.address}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-xs border border-gray-700 text-xs text-green-400 px-3 py-1 rounded-full font-medium">
+              <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-xs border border-gray-700 text-xs text-gray-100 px-3 py-1 rounded-full font-medium">
                 {listing.tag || "Featured Property"}
               </div>
             </div>
-          )}
-
-          {!listing.image_url && (
-            <div className="inline-flex items-center gap-2 bg-[#1A1D1F] border border-gray-800 text-xs text-green-400 px-3 py-1.5 rounded-full">
+          ) : (
+            <div className="inline-flex items-center gap-2 bg-[#1A1D1F] border border-gray-800 text-xs text-gray-200 px-3 py-1.5 rounded-full">
               <Building2 size={14} />
               <span>Exclusive Property • {listing.tag || "Featured"}</span>
             </div>
@@ -143,7 +197,7 @@ export default function PublicPropertyLandingPage() {
           </h1>
 
           <div className="flex flex-wrap items-center gap-4 text-sm text-gray-300">
-            <span className="text-2xl font-bold text-green-400">
+            <span className="text-2xl font-bold text-white">
               ${Number(listing.price || 0).toLocaleString()}
             </span>
             {Number(listing.beds) > 0 && (
@@ -171,12 +225,12 @@ export default function PublicPropertyLandingPage() {
 
           <div className="bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <MapPin size={16} className="text-green-400" />
+              <MapPin size={16} />
               <span>Property Overview & Private Showing Access</span>
             </div>
             <p className="text-sm text-gray-300 leading-relaxed">
               {listing.description ||
-                "Request the complete property packet, floor plans, disclosures, or schedule a private tour. Our AI Concierge will connect you directly with our listing advisor."}
+                "Request the complete property packet, floor plans, seller disclosures, or lock in a private showing time. Our AI Concierge responds in seconds."}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
               <div className="bg-[#111315] border border-gray-800 rounded-xl p-3">
@@ -184,8 +238,8 @@ export default function PublicPropertyLandingPage() {
                 <div className="font-semibold text-gray-200 mt-0.5">{listing.status}</div>
               </div>
               <div className="bg-[#111315] border border-gray-800 rounded-xl p-3">
-                <div className="text-gray-500">Response Time</div>
-                <div className="font-semibold text-green-400 mt-0.5">&lt; 60 Seconds</div>
+                <div className="text-gray-500">Tour Confirmation</div>
+                <div className="font-semibold text-gray-100 mt-0.5">&lt; 60 Seconds</div>
               </div>
               <div className="bg-[#111315] border border-gray-800 rounded-xl p-3">
                 <div className="text-gray-500">Represented By</div>
@@ -195,33 +249,93 @@ export default function PublicPropertyLandingPage() {
           </div>
         </div>
 
-        {/* Right: Lead Capture Funnel Card */}
+        {/* Right: 2-Step Qualification Funnel + Live Post-Submit AI Concierge Chat */}
         <div className="lg:col-span-5 bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-2xl sticky top-8">
-          {submittedReply ? (
-            <div className="space-y-5 text-center py-4">
-              <div className="w-12 h-12 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 flex items-center justify-center mx-auto">
-                <CheckCircle2 size={24} />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Request Received!</h2>
-                <p className="text-xs text-gray-400 mt-1">
-                  Your inquiry has been routed to {brokerageName}.
-                </p>
-              </div>
-              <div className="bg-[#111315] border border-green-500/30 rounded-xl p-4 text-left space-y-1.5">
-                <div className="text-[11px] font-semibold text-green-400 flex items-center gap-1.5">
-                  <Sparkles size={13} />
-                  <span>AI Concierge Instant Response</span>
+          {chatHistory.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2.5 pb-3 border-b border-gray-800">
+                <div className="w-9 h-9 rounded-full bg-green-600/20 border border-green-500/40 flex items-center justify-center">
+                  <CheckCircle2 size={18} />
                 </div>
-                <p className="text-xs text-gray-200 leading-relaxed">{submittedReply}</p>
+                <div>
+                  <h2 className="text-sm font-bold text-white">
+                    Live AI Concierge • {brokerageName}
+                  </h2>
+                  <p className="text-[11px] text-gray-400">
+                    Reply below to lock in your showing time or request disclosures
+                  </p>
+                </div>
               </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1">
+                {chatHistory.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`rounded-xl p-3 text-xs leading-relaxed ${
+                      m.role === "assistant"
+                        ? "bg-[#111315] border border-gray-800 text-gray-200"
+                        : "bg-green-600 text-white ml-6"
+                    }`}
+                  >
+                    {m.role === "assistant" && (
+                      <div className="text-[10px] font-semibold text-gray-400 mb-1 flex items-center gap-1">
+                        <Sparkles size={11} />
+                        <span>Concierge</span>
+                      </div>
+                    )}
+                    {m.content}
+                  </div>
+                ))}
+              </div>
+
+              {/* One-Tap Tour & Financing Quick Replies */}
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  "Schedule a tour this weekend",
+                  "Send seller disclosures",
+                  "Connect me with your lender",
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => handleSendChat(chip)}
+                    disabled={sendingChat}
+                    className="text-[11px] bg-[#111315] hover:bg-gray-800 border border-gray-700 text-gray-200 px-2.5 py-1 rounded-full cursor-pointer"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChat();
+                }}
+                className="flex gap-2 pt-1"
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type a day/time or question..."
+                  className="flex-1 bg-[#111315] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+                <button
+                  type="submit"
+                  disabled={sendingChat || !chatInput.trim()}
+                  className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <Send size={13} />
+                </button>
+              </form>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <h2 className="text-xl font-bold text-white">Request Info & Private Tour</h2>
                 <p className="text-xs text-gray-400 mt-1">
-                  Get instant access to property details and showing availability.
+                  Customize your inquiry below for instant showing availability.
                 </p>
               </div>
 
@@ -230,6 +344,35 @@ export default function PublicPropertyLandingPage() {
                   {error}
                 </div>
               )}
+
+              {/* Step 1: Micro-Commitment Qualification Pills */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] text-gray-400 mb-1">Move Timeframe</label>
+                  <select
+                    value={moveTimeline}
+                    onChange={(e) => setMoveTimeline(e.target.value)}
+                    className="w-full bg-[#111315] border border-gray-700 rounded-xl px-2.5 py-2 text-xs text-gray-200 outline-none focus:border-green-500"
+                  >
+                    <option value="ASAP (Under 30 days)">ASAP (&lt; 30 days)</option>
+                    <option value="Within 30–60 days">30–60 days</option>
+                    <option value="3–6 months">3–6 months</option>
+                    <option value="Just browsing">Just browsing</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-400 mb-1">Financing Status</label>
+                  <select
+                    value={preApproved}
+                    onChange={(e) => setPreApproved(e.target.value)}
+                    className="w-full bg-[#111315] border border-gray-700 rounded-xl px-2.5 py-2 text-xs text-gray-200 outline-none focus:border-green-500"
+                  >
+                    <option value="Yes, Pre-Approved">Pre-Approved</option>
+                    <option value="Cash Buyer">Cash Buyer</option>
+                    <option value="Not pre-approved yet">Need Pre-Approval</option>
+                  </select>
+                </div>
+              </div>
 
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Full Name *</label>
@@ -244,7 +387,7 @@ export default function PublicPropertyLandingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Mobile Phone (for SMS updates) *</label>
+                <label className="block text-xs text-gray-400 mb-1">Mobile Phone (for SMS tour alerts) *</label>
                 <input
                   type="tel"
                   required
@@ -268,12 +411,12 @@ export default function PublicPropertyLandingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Timeline / Questions</label>
+                <label className="block text-xs text-gray-400 mb-1">Preferred Tour Day / Questions</label>
                 <textarea
                   rows={2}
                   value={inquiryNotes}
                   onChange={(e) => setInquiryNotes(e.target.value)}
-                  placeholder="e.g. Looking to tour this week or close within 30–60 days..."
+                  placeholder="e.g. Available Saturday morning or weekday after 5pm..."
                   className="w-full bg-[#111315] border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-green-500"
                 />
               </div>
@@ -283,12 +426,12 @@ export default function PublicPropertyLandingPage() {
                 disabled={submitting}
                 className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
-                <span>{submitting ? "Sending Request..." : "Get Property Details"}</span>
+                <span>{submitting ? "Unlocking Details..." : "Unlock Details & Schedule Tour"}</span>
                 <ArrowRight size={16} />
               </button>
 
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-500 pt-1">
-                <ShieldCheck size={13} className="text-green-500" />
+                <ShieldCheck size={13} />
                 <span>Instant AI Concierge scheduling • Zero spam</span>
               </div>
             </form>

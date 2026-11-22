@@ -24,6 +24,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!email?.trim() && !phone?.trim()) {
+      return NextResponse.json(
+        { error: "Please provide either an email address or phone number." },
+        { status: 400 }
+      );
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -40,7 +47,6 @@ export async function POST(request: Request) {
 
     let resolvedTenantId = String(rawTenantId || "").trim();
 
-    // 1. If tenantId wasn't passed, resolve it from the listing record
     if (!resolvedTenantId && listingId) {
       const { data: listingRow } = await supabase
         .from("listings")
@@ -52,7 +58,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Fallback to primary workspace if still empty
     if (!resolvedTenantId) {
       const { data: primaryTenant } = await supabase
         .from("tenants")
@@ -74,6 +79,7 @@ export async function POST(request: Request) {
 
     const workspaceName = tenant?.name || "CloseFlow Real Estate";
     const targetTenantId = tenant?.id || resolvedTenantId || null;
+    const firstName = fullName.trim().split(" ")[0];
 
     const now = new Date().toISOString();
     const initialContext = propertyAddress
@@ -90,7 +96,7 @@ export async function POST(request: Request) {
 
     const concierge = await runAiConcierge({
       workspaceName,
-      leadName: fullName.trim().split(" ")[0],
+      leadName: firstName,
       history: initialHistory,
       existingData: {
         location: propertyAddress || undefined,
@@ -108,6 +114,8 @@ export async function POST(request: Request) {
       },
     ];
 
+    const initialStage = concierge.score >= 80 ? "Property Tours" : "New Leads";
+
     const { data: createdLead, error: leadError } = await supabase
       .from("leads")
       .insert([
@@ -117,7 +125,7 @@ export async function POST(request: Request) {
           email: email?.trim() || null,
           phone: phone?.trim() || null,
           estimated_value: Number(estimatedValue) || 0,
-          status: "New Leads",
+          status: initialStage,
           tag: sourceType === "Valuation Funnel" ? "Seller / Valuation" : "Property Inquiry",
           lead_source: sourceType,
           qualification_score: concierge.score,
@@ -136,6 +144,9 @@ export async function POST(request: Request) {
     }
 
     const cleanPhone = String(phone || "").trim();
+    const cleanEmail = String(email || "").trim();
+
+    // 1. Instant SMS Speed-to-Lead via Twilio
     if (
       cleanPhone &&
       tenant?.twilio_phone_number &&
@@ -158,22 +169,72 @@ export async function POST(request: Request) {
       }).catch((err) => console.error("Twilio outbound welcome failed:", err));
     }
 
-    if (targetTenantId) {
-      const { data: activeWorkflows } = await supabase
-        .from("workflows")
-        .select("id, triggers_count")
-        .eq("tenant_id", targetTenantId)
-        .eq("status", "Active");
+    // 2. Instant Email Speed-to-Lead via Resend
+    if (cleanEmail && process.env.RESEND_API_KEY) {
+      const subject = propertyAddress
+        ? `Info & Showing Times for ${propertyAddress}`
+        : `Your ${workspaceName} Request`;
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from:
+            process.env.RESEND_FROM_EMAIL ||
+            `${workspaceName} <onboarding@resend.dev>`,
+          to: [cleanEmail],
+          subject,
+          html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#111827;line-height:1.6;">
+            <p>${concierge.reply}</p>
+            <p style="font-size:12px;color:#6b7280;margin-top:20px;">— ${workspaceName} Concierge</p>
+          </div>`,
+        }),
+      }).catch((err) => console.error("Resend welcome email failed:", err));
+    }
 
-      if (activeWorkflows && activeWorkflows.length > 0) {
-        await Promise.all(
-          activeWorkflows.map((wf) =>
+    // 3. Fire matching "New Leads" workflows & record real execution logs
+    if (targetTenantId && createdLead?.id) {
+      const { data: stageWorkflows } = await supabase
+        .from("workflows")
+        .select("*")
+        .eq("tenant_id", targetTenantId)
+        .eq("status", "Active")
+        .eq("trigger_stage", "New Leads");
+
+      if (stageWorkflows && stageWorkflows.length > 0) {
+        for (const wf of stageWorkflows) {
+          const stepOne = Array.isArray(wf.steps) && wf.steps.length > 0
+            ? wf.steps[0]
+            : {
+                channel: cleanPhone ? "SMS" : "Email",
+                message: `Hi ${firstName}, thanks for reaching out to ${workspaceName}!`,
+              };
+
+          const renderedMsg = String(stepOne.message || "")
+            .replace(/\{\{first_name\}\}/gi, firstName)
+            .replace(/\{\{workspace_name\}\}/gi, workspaceName);
+
+          await Promise.all([
+            supabase.from("workflow_logs").insert([
+              {
+                tenant_id: targetTenantId,
+                workflow_id: wf.id,
+                lead_id: createdLead.id,
+                lead_name: createdLead.full_name,
+                step_index: 1,
+                channel: stepOne.channel || (cleanPhone ? "SMS" : "Email"),
+                message_sent: renderedMsg,
+                status: "Auto-Triggered on Capture",
+              },
+            ]),
             supabase
               .from("workflows")
               .update({ triggers_count: Number(wf.triggers_count || 0) + 1 })
-              .eq("id", wf.id)
-          )
-        );
+              .eq("id", wf.id),
+          ]);
+        }
       }
     }
 
@@ -181,6 +242,8 @@ export async function POST(request: Request) {
       success: true,
       leadId: createdLead?.id,
       conciergeReply: concierge.reply,
+      qualificationScore: concierge.score,
+      stage: initialStage,
       listingId: listingId || null,
     });
   } catch (err: unknown) {
