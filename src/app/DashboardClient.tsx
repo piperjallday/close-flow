@@ -82,6 +82,9 @@ export default function DashboardClient({
   const [activeConciergeLead, setActiveConciergeLead] = useState<LeadRecord | null>(null);
   const [isConciergeOpen, setIsConciergeOpen] = useState(false);
 
+  // ClearClose AI Offer Handoff Modal State
+  const [clearCloseOfferLead, setClearCloseOfferLead] = useState<any | null>(null);
+
   // Social Autoposter Studio State
   const [socialListing, setSocialListing] = useState<any | null>(null);
 
@@ -342,12 +345,18 @@ export default function DashboardClient({
     }
   };
 
-  // Move lead between Kanban stages + fire stage-triggered drip workflows
+  // Move lead between Kanban stages + trigger ClearClose AI Offer modal on "Fav Offers" + fire drip workflows
   const handleStageChange = async (leadId: string, newStatus: string) => {
     const previousLeads = [...leads];
+    const targetLead = leads.find((l) => l.id === leadId);
+
     setLeads((prev) =>
       prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l))
     );
+
+    if (newStatus === "Fav Offers" && targetLead) {
+      setClearCloseOfferLead({ ...targetLead, status: newStatus });
+    }
 
     const { error } = await supabase
       .from("leads")
@@ -558,7 +567,7 @@ export default function DashboardClient({
       l.tag?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Unread Alerts filtered by persisted clear timestamp
+  // Unread Alerts filtered by persisted clear timestamp (synced to 20 items to match AppShell)
   const unreadAlerts = [...leads]
     .filter((l) => {
       if (!lastSeenAlertTime) return true;
@@ -570,7 +579,7 @@ export default function DashboardClient({
         new Date(b.last_contacted_at || b.created_at || 0).getTime() -
         new Date(a.last_contacted_at || a.created_at || 0).getTime()
     )
-    .slice(0, 8);
+    .slice(0, 20);
 
   // Live Metric Calculations
   const activeLeadsCount = leads.filter((l) => l.status !== "Closed Deals").length;
@@ -911,6 +920,7 @@ export default function DashboardClient({
                       onStageChange={handleStageChange}
                       onDeleteLead={handleDeleteLead}
                       onOpenConcierge={openConciergeForLead}
+                      onOpenClearCloseOffer={(lead) => setClearCloseOfferLead(lead)}
                     />
                   );
                 })}
@@ -1038,6 +1048,86 @@ export default function DashboardClient({
                 className="text-[11px] text-gray-400 hover:text-white cursor-pointer"
               >
                 Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ClearClose AI Offer Handoff Modal */}
+      {clearCloseOfferLead && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-[#24282B] border border-gray-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-green-600/20 border border-green-500/40 text-green-400">
+                ClearClose AI • Contract & Offer Engine
+              </span>
+              <button
+                type="button"
+                onClick={() => setClearCloseOfferLead(null)}
+                className="text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                Ready to Write an Offer for{" "}
+                {clearCloseOfferLead.full_name || clearCloseOfferLead.name}?
+              </h3>
+              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                Send this qualified lead directly into <strong>ClearClose AI</strong> to
+                auto-draft state-specific purchase contracts, contingencies, and e-signature
+                packets in seconds.
+              </p>
+            </div>
+
+            <div className="bg-[#111315] border border-gray-800 rounded-xl p-3.5 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Buyer / Client:</span>
+                <span className="font-semibold text-white">
+                  {clearCloseOfferLead.full_name || clearCloseOfferLead.name}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Target Offer Value:</span>
+                <span className="font-semibold text-white">
+                  ${Number(clearCloseOfferLead.estimated_value || 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">AI Qualification Score:</span>
+                <span className="font-semibold text-white">
+                  {clearCloseOfferLead.qualification_score ??
+                    clearCloseOfferLead.intent_score ??
+                    25}
+                  %
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <a
+                href={`https://clearclose.ai/write-offer?lead_name=${encodeURIComponent(
+                  clearCloseOfferLead.full_name || clearCloseOfferLead.name || ""
+                )}&email=${encodeURIComponent(
+                  clearCloseOfferLead.email || ""
+                )}&price=${encodeURIComponent(
+                  String(clearCloseOfferLead.estimated_value || 0)
+                )}&source=closeflow`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full bg-green-600 hover:bg-green-500 text-white text-xs font-semibold py-2.5 px-4 rounded-xl text-center transition-colors"
+              >
+                Launch Write Offer Tool in ClearClose AI →
+              </a>
+              <button
+                type="button"
+                onClick={() => setClearCloseOfferLead(null)}
+                className="w-full text-xs text-gray-400 hover:text-white py-1.5 cursor-pointer"
+              >
+                Keep in CloseFlow Pipeline
               </button>
             </div>
           </div>
@@ -1507,6 +1597,7 @@ function KanbanColumn({
   onStageChange,
   onDeleteLead,
   onOpenConcierge,
+  onOpenClearCloseOffer,
 }: {
   title: string;
   leads: any[];
@@ -1518,6 +1609,7 @@ function KanbanColumn({
   onStageChange: (leadId: string, newStatus: string) => void;
   onDeleteLead: (leadId: string) => void;
   onOpenConcierge: (lead: any) => void;
+  onOpenClearCloseOffer: (lead: any) => void;
 }) {
   return (
     <div
@@ -1598,6 +1690,13 @@ function KanbanColumn({
                   className="w-full bg-green-600/20 hover:bg-green-600/30 text-gray-100 border border-green-500/30 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
                 >
                   AI Concierge
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenClearCloseOffer(lead)}
+                  className="w-full bg-[#111315] hover:bg-gray-800 text-gray-100 border border-gray-700 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
+                >
+                  Write Offer • ClearClose AI →
                 </button>
                 <select
                   value={lead.status}
