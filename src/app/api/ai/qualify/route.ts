@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     lpmama.appointment = reply;
     lpmama.qualified = true;
     pointsEarned = 25;
-    nextAiMessage = `Locked in for ${reply}! I've notified our senior agent with your full LPMAMA profile so they're prepared for you.`;
+    nextAiMessage = `Locked in for ${reply}! I've notified our senior agent with your full qualification profile so they're prepared for you.`;
   }
 
   const newScore = Math.min(100, Number(lead.intent_score || 25) + pointsEarned);

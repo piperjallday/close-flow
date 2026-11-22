@@ -23,14 +23,14 @@ const PRICING_TIERS = [
     period: "/month",
     badge: "14-Day Free Trial",
     description:
-      "Built for independent producing agents to capture leads, run LPMAMA AI qualification, and replace Listings to Leads & Homebot.",
+      "Built for independent producing agents to capture leads, run AI qualification, and replace Listings to Leads & Homebot.",
     highlighted: false,
     cta: "Start 14-Day Free Trial",
     features: [
       "14-day free trial, then $99/mo",
       "Up to 2 team seats",
       "Public Property & Home Valuation Capture Pages",
-      "Autonomous LPMAMA AI SMS Qualifier",
+      "Autonomous AI SMS Qualifier",
       "Interactive Google Maps Listing Inventory",
     ],
   },
@@ -77,7 +77,7 @@ const PRICING_TIERS = [
 const FEATURES = [
   {
     icon: <Bot size={20} className="text-purple-400" />,
-    title: "Autonomous LPMAMA AI",
+    title: "Autonomous AI Lead Concierge",
     description:
       "Engages prospects automatically across Location, Price, Mortgage, Agent status, Motivation, and Appointment—promoting hot leads at 70%+ intent.",
   },
@@ -137,31 +137,31 @@ export default async function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-3">
-            {user ? (
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-              >
-                <span>Open Workspace</span>
-                <ArrowRight size={16} />
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="text-sm text-gray-300 hover:text-white px-3 py-2 transition-colors"
-                >
-                  Sign In
-                </Link>
-                <a
-                  href="#pricing"
-                  className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-                >
-                  Start Free Trial
-                </a>
-              </>
-            )}
-          </div>
+  {user ? (
+    <Link
+      href="/dashboard"
+      className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+    >
+      <span>Open Workspace</span>
+      <ArrowRight size={16} />
+    </Link>
+  ) : (
+    <>
+      <Link
+        href="/login"
+        className="text-sm font-medium text-gray-200 hover:text-white border border-gray-700 hover:border-gray-500 px-4 py-2 rounded-lg transition-colors"
+      >
+        Login
+      </Link>
+      <Link
+        href="/login?signup=true"
+        className="bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+      >
+        Sign Up for 14-Day Trial
+      </Link>
+    </>
+  )}
+</div>
         </div>
       </header>
 
@@ -170,7 +170,7 @@ export default async function LandingPage() {
         <div className="max-w-5xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-[#1A1D1F] border border-gray-800 text-green-400 text-xs font-medium px-3.5 py-1.5 rounded-full mb-6">
             <Zap size={14} />
-            <span>14-Day Free Trial • Autonomous Real Estate CRM & LPMAMA AI</span>
+            <span>14-Day Free Trial • Autonomous Real Estate CRM & AI Lead Concierge</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-white leading-tight mb-6">
@@ -180,7 +180,7 @@ export default async function LandingPage() {
 
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
             CloseFlow combines public Property & Home Valuation capture pages, autonomous
-            LPMAMA AI qualification, partner lender routing, and real-time team Kanban sync
+            AI lead qualification, partner lender routing, and real-time team Kanban sync
             in one white-label workspace.
           </p>
 

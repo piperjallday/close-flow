@@ -233,9 +233,9 @@ export default function DashboardClient({
   }, []);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  };
+  await supabase.auth.signOut();
+  window.location.href = "/";
+};;
 
   const copyPublicLink = (key: string, path: string) => {
     const fullUrl = `${window.location.origin}${path}`;
@@ -856,7 +856,7 @@ export default function DashboardClient({
               {/* 6 LPMAMA Pillars Status Grid */}
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                  LPMAMA Qualification Tracker
+                  Lead Qualification Profile
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {[
@@ -888,7 +888,7 @@ export default function DashboardClient({
                 <div className="bg-[#111315] border border-gray-800 rounded-xl p-4 space-y-3 max-h-72 overflow-y-auto">
                   {lpmamaEvents.length === 0 ? (
                     <p className="text-xs text-gray-500 italic">
-                      No AI messages yet. Simulate a prospect reply below to trigger LPMAMA qualification.
+                      No AI messages yet. Simulate a prospect reply below to run autonomous AI qualification.
                     </p>
                   ) : (
                     lpmamaEvents.map((ev) => (
@@ -1392,7 +1392,7 @@ function KanbanColumn({
                   onClick={() => onOpenLpmama(lead)}
                   className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer shrink-0"
                 >
-                  LPMAMA AI
+                  AI Qualifier
                 </button>
                 <select
                   value={lead.status}

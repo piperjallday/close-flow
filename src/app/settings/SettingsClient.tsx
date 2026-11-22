@@ -488,7 +488,7 @@ export default function SettingsClient({
               <div>
                 <h2 className="text-base font-medium">Partner Lender Network</h2>
                 <p className="text-xs text-gray-400">
-                  Free for lending partners to join — unapproved buyers in LPMAMA auto-route here
+                  Free for lending partners to join — unapproved buyers auto-route here during AI qualification
                 </p>
               </div>
             </div>
@@ -591,7 +591,7 @@ export default function SettingsClient({
           )}
         </div>
 
-        {/* Workspace Profile & Editable LPMAMA AI Opening Script */}
+        {/* Workspace Profile & Custom AI Concierge Opening Greeting */}
         <form
           onSubmit={handleSaveWorkspace}
           className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-5"
