@@ -3,7 +3,7 @@
 import Link from "next/link";
 import AiConciergeDrawer, { LeadRecord } from "../components/AiConciergeDrawer";
 import SocialAutoposterModal from "../components/SocialAutoposterModal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   LayoutDashboard, Users, Building, DollarSign, Contact, CheckSquare,
   Workflow, BarChart as BarChartIcon, Settings, Search, Bell,
@@ -66,7 +66,7 @@ export default function DashboardClient({
   listings: initialListings,
   workflows: initialWorkflows,
 }: DashboardProps) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [today, setToday] = useState("");
   const [leads, setLeads] = useState<any[]>(initialLeads);
   const [listings, setListings] = useState<any[]>(initialListings);
@@ -109,101 +109,111 @@ export default function DashboardClient({
   };
 
   // Real-time Team Sync across Leads, Listings, and Workflows
-  useEffect(() => {
-    if (!tenantId) return;
+useEffect(() => {
+  if (!tenantId) return;
 
-    const channel = supabase
-      .channel(`dashboard-live-${tenantId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "leads",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setLeads((prev) =>
-              prev.some((l) => l.id === payload.new.id)
-                ? prev
-                : [payload.new, ...prev]
-            );
-          } else if (payload.eventType === "UPDATE") {
-            setLeads((prev) =>
-              prev.map((l) =>
-                l.id === payload.new.id ? { ...l, ...payload.new } : l
-              )
-            );
-          } else if (payload.eventType === "DELETE") {
-            setLeads((prev) => prev.filter((l) => l.id !== payload.old.id));
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "listings",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setListings((prev) =>
-              prev.some((item) => item.id === payload.new.id)
-                ? prev
-                : [payload.new, ...prev]
-            );
-          } else if (payload.eventType === "UPDATE") {
-            setListings((prev) =>
-              prev.map((item) =>
-                item.id === payload.new.id ? { ...item, ...payload.new } : item
-              )
-            );
-          } else if (payload.eventType === "DELETE") {
-            setListings((prev) => {
-              const updated = prev.filter((item) => item.id !== payload.old.id);
-              setSelectedListingId((curr) =>
-                curr === payload.old.id ? updated[0]?.id || null : curr
-              );
-              return updated;
-            });
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "workflows",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setWorkflows((prev) =>
-              prev.some((wf) => wf.id === payload.new.id)
-                ? prev
-                : [...prev, payload.new]
-            );
-          } else if (payload.eventType === "UPDATE") {
-            setWorkflows((prev) =>
-              prev.map((wf) =>
-                wf.id === payload.new.id ? { ...wf, ...payload.new } : wf
-              )
-            );
-          } else if (payload.eventType === "DELETE") {
-            setWorkflows((prev) => prev.filter((wf) => wf.id !== payload.old.id));
-          }
-        }
-      )
-      .subscribe();
+  const channelName = `dashboard-live-${tenantId}`;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [tenantId, supabase]);
+  // Clean up any stale channel instance before registering .on() listeners
+  const existingChannel = supabase
+    .getChannels()
+    .find((ch) => ch.topic === `realtime:${channelName}`);
+  if (existingChannel) {
+    supabase.removeChannel(existingChannel);
+  }
+
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "leads",
+        filter: `tenant_id=eq.${tenantId}`,
+      },
+      (payload) => {
+        if (payload.eventType === "INSERT") {
+          setLeads((prev) =>
+            prev.some((l) => l.id === payload.new.id)
+              ? prev
+              : [payload.new, ...prev]
+          );
+        } else if (payload.eventType === "UPDATE") {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === payload.new.id ? { ...l, ...payload.new } : l
+            )
+          );
+        } else if (payload.eventType === "DELETE") {
+          setLeads((prev) => prev.filter((l) => l.id !== payload.old.id));
+        }
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "listings",
+        filter: `tenant_id=eq.${tenantId}`,
+      },
+      (payload) => {
+        if (payload.eventType === "INSERT") {
+          setListings((prev) =>
+            prev.some((item) => item.id === payload.new.id)
+              ? prev
+              : [payload.new, ...prev]
+          );
+        } else if (payload.eventType === "UPDATE") {
+          setListings((prev) =>
+            prev.map((item) =>
+              item.id === payload.new.id ? { ...item, ...payload.new } : item
+            )
+          );
+        } else if (payload.eventType === "DELETE") {
+          setListings((prev) => {
+            const updated = prev.filter((item) => item.id !== payload.old.id);
+            setSelectedListingId((curr) =>
+              curr === payload.old.id ? updated[0]?.id || null : curr
+            );
+            return updated;
+          });
+        }
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "workflows",
+        filter: `tenant_id=eq.${tenantId}`,
+      },
+      (payload) => {
+        if (payload.eventType === "INSERT") {
+          setWorkflows((prev) =>
+            prev.some((wf) => wf.id === payload.new.id)
+              ? prev
+              : [...prev, payload.new]
+          );
+        } else if (payload.eventType === "UPDATE") {
+          setWorkflows((prev) =>
+            prev.map((wf) =>
+              wf.id === payload.new.id ? { ...wf, ...payload.new } : wf
+            )
+          );
+        } else if (payload.eventType === "DELETE") {
+          setWorkflows((prev) => prev.filter((wf) => wf.id !== payload.old.id));
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [tenantId, supabase]);
 
   // Add Lead Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
