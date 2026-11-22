@@ -8,7 +8,7 @@ import {
   Workflow, BarChart as BarChartIcon, Settings, Search, Bell,
   MoreHorizontal, Mail, Home, Star, LogOut, Plus, X, Trash2
 } from "lucide-react";
-import { BarChart, AreaChart } from "@tremor/react";
+import { AreaChart } from "@tremor/react";
 import { createClient } from "../lib/supabase/client";
 import ListingsMap from "../components/ListingsMap";
 
@@ -71,6 +71,10 @@ export default function DashboardClient({
   const [listings, setListings] = useState<any[]>(initialListings);
   const [workflows, setWorkflows] = useState<any[]>(initialWorkflows);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Interactive Alert Bell State
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
+  const [lastSeenAlertTime, setLastSeenAlertTime] = useState<string>("");
 
   // AI Concierge Drawer State
   const [activeConciergeLead, setActiveConciergeLead] = useState<LeadRecord | null>(null);
@@ -480,6 +484,21 @@ export default function DashboardClient({
       l.tag?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Recent Alerts & Unread Count
+  const recentAlerts = [...leads]
+    .sort(
+      (a, b) =>
+        new Date(b.last_contacted_at || b.created_at || 0).getTime() -
+        new Date(a.last_contacted_at || a.created_at || 0).getTime()
+    )
+    .slice(0, 8);
+
+  const unreadAlertsCount = recentAlerts.filter((l) => {
+    if (!lastSeenAlertTime) return true;
+    const itemTime = new Date(l.last_contacted_at || l.created_at || 0).getTime();
+    return itemTime > new Date(lastSeenAlertTime).getTime();
+  }).length;
+
   // Live Metric Calculations
   const activeLeadsCount = leads.filter((l) => l.status !== "Closed Deals").length;
   const newListingsCount = listings.filter((item) => item.status !== "Sold").length;
@@ -572,12 +591,86 @@ export default function DashboardClient({
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               AI Concierge
             </button>
+
+            {/* Interactive Alert Bell */}
             <div className="relative">
-              <Bell size={20} className="text-gray-400 hover:text-white cursor-pointer" />
-              <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-                {leads.length}
-              </span>
+              <button
+                type="button"
+                onClick={() => setIsAlertsOpen((prev) => !prev)}
+                className="relative p-1.5 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+                aria-label="Workspace Alerts"
+              >
+                <Bell size={20} className="text-gray-300 hover:text-white" />
+                {unreadAlertsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
+                    {unreadAlertsCount}
+                  </span>
+                )}
+              </button>
+
+              {isAlertsOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-[#14171A] border border-gray-800 rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between bg-[#1A1D1F]">
+                    <span className="text-xs font-semibold text-white">
+                      Live Lead & Concierge Alerts
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLastSeenAlertTime(new Date().toISOString())}
+                      className="text-[11px] text-green-400 hover:text-green-300 cursor-pointer"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-800/80">
+                    {recentAlerts.length === 0 ? (
+                      <div className="p-4 text-xs text-gray-500 text-center">
+                        No recent activity yet.
+                      </div>
+                    ) : (
+                      recentAlerts.map((item) => {
+                        const score = Number(
+                          item.qualification_score ?? item.intent_score ?? 0
+                        );
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setIsAlertsOpen(false);
+                              openConciergeForLead(item);
+                            }}
+                            className="w-full text-left px-4 py-3 hover:bg-[#1F2327] transition-colors flex flex-col gap-1 cursor-pointer"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-medium text-gray-100 truncate">
+                                {item.full_name || item.name}
+                              </span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                  score >= 75
+                                    ? "bg-green-500/20 text-green-400"
+                                    : "bg-gray-800 text-gray-400"
+                                }`}
+                              >
+                                {score >= 75
+                                  ? `Qualified (${score}%)`
+                                  : item.status || "New"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 truncate">
+                              {item.notes ||
+                                `Source: ${item.lead_source || item.source || "Direct"}`}
+                            </p>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-green-600/20 border border-green-500/40 rounded-full flex items-center justify-center text-green-400 font-semibold uppercase">
                 {displayName.charAt(0)}
@@ -620,31 +713,59 @@ export default function DashboardClient({
                 <Metric label="Total Revenue" value={formattedRevenue} trend="Live DB" />
               </div>
 
-              <div className="grid grid-cols-3 gap-4 items-end mt-auto">
-                <div className="col-span-1">
-                  <BarChart
-                    className="h-32"
-                    data={barChartData}
-                    index="name"
-                    categories={["Active Leads"]}
-                    colors={["green"]}
-                    showYAxis={false}
-                    showLegend={false}
-                    showGridLines={false}
-                  />
+              <div className="grid grid-cols-3 gap-4 items-end mt-auto pt-2">
+                {/* Bright Emerald Bar Chart */}
+                <div className="col-span-1 flex flex-col justify-end h-32">
+                  <div className="flex items-end justify-between gap-1.5 h-24 px-1">
+                    {barChartData.map((d) => {
+                      const heightPct = Math.round((d["Active Leads"] / 300) * 100);
+                      return (
+                        <div key={d.name} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+                          <div
+                            style={{ height: `${heightPct}%` }}
+                            className="w-full bg-green-500 hover:bg-green-400 rounded-t transition-all shadow-[0_0_10px_rgba(34,197,94,0.35)]"
+                            title={`${d.name}: ${d["Active Leads"]} leads`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-1">
+                    {barChartData.map((d) => (
+                      <span key={d.name}>{d.name}</span>
+                    ))}
+                  </div>
                 </div>
-                <div className="col-span-1">
-                  <AreaChart
-                    className="h-32"
-                    data={areaChartData}
-                    index="name"
-                    categories={["Deals Closed"]}
-                    colors={["green"]}
-                    showYAxis={false}
-                    showLegend={false}
-                    showGridLines={false}
-                  />
+
+                {/* Bright Emerald Trend Area Chart */}
+                <div className="col-span-1 flex flex-col justify-end h-32">
+                  <svg viewBox="0 0 180 80" className="w-full h-24 overflow-visible">
+                    <defs>
+                      <linearGradient id="emeraldArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#22c55e" stopOpacity="0.45" />
+                        <stop offset="100%" stopColor="#22c55e" stopOpacity="0.02" />
+                      </linearGradient>
+                    </defs>
+                    <polygon
+                      fill="url(#emeraldArea)"
+                      points="0,80 0,53 36,37 72,48 108,32 144,16 180,4 180,80"
+                    />
+                    <polyline
+                      fill="none"
+                      stroke="#22c55e"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points="0,53 36,37 72,48 108,32 144,16 180,4"
+                    />
+                  </svg>
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-1">
+                    {areaChartData.map((d) => (
+                      <span key={d.name}>{d.name}</span>
+                    ))}
+                  </div>
                 </div>
+
                 <div className="col-span-1 flex justify-around items-center h-32">
                   <MetricRing value={75} label="Pipeline" />
                   <MetricRing value={45} label="Quota" />
@@ -1219,7 +1340,7 @@ function KanbanColumn({
         e.preventDefault();
         onDropLead();
       }}
-      className={`flex-1 min-w-[185px] flex flex-col gap-3 rounded-lg p-2 transition-colors ${
+      className={`flex-1 min-w-[225px] flex flex-col gap-3 rounded-lg p-2.5 transition-colors ${
         isDragOver
           ? "bg-green-500/10 border border-dashed border-green-500/60"
           : "border border-transparent"
@@ -1244,11 +1365,11 @@ function KanbanColumn({
               key={lead.id}
               draggable
               onDragStart={() => onDragStartLead(lead.id)}
-              className="bg-[#2A2E32] p-3 rounded border border-gray-700 hover:border-green-500/60 transition-colors flex flex-col gap-2 cursor-grab active:cursor-grabbing"
+              className="bg-[#2A2E32] p-3.5 rounded-lg border border-gray-700 hover:border-green-500/60 transition-colors flex flex-col gap-2.5 cursor-grab active:cursor-grabbing"
             >
-              <div className="flex items-start justify-between gap-1">
-                <div>
-                  <div className="text-xs font-medium text-gray-200 mb-0.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-gray-100 truncate mb-0.5">
                     {lead.full_name || lead.name}
                   </div>
                   <div className="text-[11px] text-gray-400">
@@ -1256,7 +1377,7 @@ function KanbanColumn({
                   </div>
                 </div>
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
+                  className={`text-[10px] px-2 py-0.5 rounded font-semibold shrink-0 ${
                     isHot
                       ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                       : "bg-[#111315] text-gray-400 border border-gray-700"
@@ -1267,11 +1388,11 @@ function KanbanColumn({
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-1 pt-1 border-t border-gray-700/60">
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-700/60">
                 <button
                   type="button"
                   onClick={() => onOpenConcierge(lead)}
-                  className="bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer shrink-0 font-medium"
+                  className="w-full bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
                 >
                   AI Concierge
                 </button>
@@ -1279,7 +1400,7 @@ function KanbanColumn({
                   value={lead.status}
                   onChange={(e) => onStageChange(lead.id, e.target.value)}
                   aria-label={`Move ${lead.full_name || lead.name} to stage`}
-                  className="bg-[#1A1D1F] text-gray-300 text-[10px] border border-gray-700 rounded px-1.5 py-0.5 outline-none focus:border-green-500 cursor-pointer max-w-[90px]"
+                  className="w-full bg-[#1A1D1F] text-gray-200 text-[11px] border border-gray-700 rounded px-2 py-1 outline-none focus:border-green-500 cursor-pointer"
                 >
                   {PIPELINE_STAGES.map((stage) => (
                     <option key={stage} value={stage}>
