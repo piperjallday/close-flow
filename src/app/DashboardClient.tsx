@@ -48,18 +48,24 @@ interface DashboardProps {
   userEmail: string;
   userRole?: string;
   tenantId: string;
+  themeMode?: string;
+  brandColor?: string;
   leads: any[];
   listings: any[];
   workflows: any[];
+  partnerLenders?: any[];
 }
 
 export default function DashboardClient({
   userEmail,
   userRole = "agent",
   tenantId,
+  themeMode = "dark",
+  brandColor = "#22c55e",
   leads: initialLeads,
   listings: initialListings,
   workflows: initialWorkflows,
+  partnerLenders: initialPartnerLenders = [],
 }: DashboardProps) {
   const supabase = createClient();
   const [today, setToday] = useState("");
@@ -268,11 +274,13 @@ export default function DashboardClient({
     if (!res.ok) return;
 
     const updatedLead = {
-      ...activeLpmamaLead,
-      intent_score: data.intentScore,
-      status: data.status,
-      lpmama_data: data.lpmama,
-    };
+    ...activeLpmamaLead,
+    intent_score: data.intentScore,
+    status: data.status,
+    lpmama_data: data.lpmama,
+    lender_routing_status: data.lenderRoutingStatus || activeLpmamaLead.lender_routing_status,
+    assigned_lender_id: data.assignedLenderId || activeLpmamaLead.assigned_lender_id,
+  };
 
     setActiveLpmamaLead(updatedLead);
     setLeads((prev) =>

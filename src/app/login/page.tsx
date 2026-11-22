@@ -38,7 +38,18 @@ export default function LoginPage() {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
+const params = new URLSearchParams(window.location.search);
+const selectedPlan = params.get("plan");
 
+await fetch("/api/alerts/new-signup", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    userEmail: email,
+    workspaceName: `${email.split("@")[0]}'s Workspace`,
+    selectedPlan: selectedPlan || "trialing",
+  }),
+});
     if (error) {
       setMessage(error.message);
       setLoading(false);

@@ -27,6 +27,8 @@ export async function POST(req: Request) {
   const reply = (prospectReply || "").trim();
   let nextAiMessage = "";
   let pointsEarned = 15;
+  let assignedLenderId = lead.assigned_lender_id || null;
+  let lenderRoutingStatus = lead.lender_routing_status || "Not Needed";
 
   // Check if prospect is bound to an exclusive buyer agreement
   if (
@@ -46,8 +48,52 @@ export async function POST(req: Request) {
       "Great budget range. Have you already been pre-approved with a lender, or are you planning to pay cash?";
   } else if (!lpmama.mortgage) {
     lpmama.mortgage = reply;
-    nextAiMessage =
-      "Got it! Just to confirm before we line up showings—are you currently signed with another real estate agent?";
+    const needsLender = /no|not yet|haven't|havent|need|none|unsure|don't/i.test(reply);
+
+    if (needsLender) {
+      const { data: lenders } = await supabase
+        .from("partner_lenders")
+        .select("*")
+        .eq("tenant_id", lead.tenant_id)
+        .eq("is_active", true)
+        .order("referrals_count", { ascending: true })
+        .limit(1);
+
+      const lender = lenders?.[0];
+      if (lender) {
+        const projectedScore = Math.min(100, Number(lead.intent_score || 25) + pointsEarned);
+        const isHighIntent = projectedScore >= 70;
+        const routingLabel = isHighIntent
+          ? `Warm Transfer → ${lender.full_name}`
+          : `Alert Sent → ${lender.full_name}`;
+
+        assignedLenderId = lender.id;
+        lenderRoutingStatus = routingLabel;
+
+        await supabase
+          .from("leads")
+          .update({
+            assigned_lender_id: lender.id,
+            lender_routing_status: routingLabel,
+          })
+          .eq("id", lead.id);
+
+        await supabase
+          .from("partner_lenders")
+          .update({ referrals_count: Number(lender.referrals_count || 0) + 1 })
+          .eq("id", lender.id);
+
+        nextAiMessage = isHighIntent
+          ? `No problem at all! I'm connecting you with our preferred lender ${lender.full_name} (${lender.company || "Partner Lending"}) for a quick 5-minute pre-qualification right now. Also, are you currently signed with another real estate agent?`
+          : `No problem at all! I've alerted our preferred lender ${lender.full_name} to send you quick pre-qualification options. Before we line up showings, are you currently signed with another real estate agent?`;
+      } else {
+        nextAiMessage =
+          "No problem at all—we can connect you with a trusted local lender to get pre-qualified fast. Just to confirm before we line up showings, are you currently signed with another real estate agent?";
+      }
+    } else {
+      nextAiMessage =
+        "Awesome—having financing lined up puts you in a strong position! Just to confirm before we line up showings, are you currently signed with another real estate agent?";
+    }
   } else if (!lpmama.agent_status) {
     lpmama.agent_status = "Unrepresented";
     nextAiMessage =
@@ -124,5 +170,7 @@ export async function POST(req: Request) {
     lpmama,
     aiReply: nextAiMessage,
     crossedHotThreshold,
+    assignedLenderId,
+    lenderRoutingStatus,
   });
 }
