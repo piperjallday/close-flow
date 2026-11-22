@@ -74,7 +74,7 @@ export default function PropertyValuationLandingPage() {
           role: "assistant",
           content:
             data.conciergeReply ||
-            `Thanks ${fullName.split(" ")[0]}! We are pulling comparable sales for ${propertyAddress}. Are you also planning to buy another home once you sell?`,
+            `Hi ${fullName.split(" ")[0]}! Thanks for requesting a home valuation for ${propertyAddress} with ${brokerageName}. Just to confirm we have the right address—are you looking to just sell ${propertyAddress}, or are you planning to buy your next home as well?`,
         },
       ]);
     } catch (err: unknown) {
@@ -88,7 +88,8 @@ export default function PropertyValuationLandingPage() {
     const msg = (quickText ?? chatInput).trim();
     if (!msg || !createdLeadId || sendingChat) return;
 
-    const nextHistory = [...chatHistory, { role: "user" as const, content: msg }];
+    const priorHistory = [...chatHistory];
+    const nextHistory = [...priorHistory, { role: "user" as const, content: msg }];
     setChatHistory(nextHistory);
     setChatInput("");
     setSendingChat(true);
@@ -101,7 +102,7 @@ export default function PropertyValuationLandingPage() {
           leadId: createdLeadId,
           tenantId,
           message: msg,
-          history: nextHistory,
+          history: priorHistory,
         }),
       });
       const data = await res.json();
@@ -122,13 +123,13 @@ export default function PropertyValuationLandingPage() {
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-2 bg-green-500/15 border border-green-500/30 text-gray-100 text-xs font-semibold px-3.5 py-1.5 rounded-full">
             <TrendingUp size={14} />
-            <span>{brokerageName} • Broker Opinion of Value</span>
+            <span>{brokerageName} • Home Value Estimate</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
             What Is Your Property Worth in Today&apos;s Market?
           </h1>
           <p className="text-sm text-gray-400">
-            Receive a custom comparable sales & net-proceeds valuation prepared by our senior advisory team.
+            Receive a custom comparable sales &amp; net-proceeds breakdown prepared by someone from our team.
           </p>
         </div>
 
@@ -144,7 +145,7 @@ export default function PropertyValuationLandingPage() {
                     Valuation Confirmed • {propertyAddress}
                   </h2>
                   <p className="text-[11px] text-gray-400">
-                    Chat with our AI Concierge to customize your CMA report
+                    Chat with our AI Concierge to set up your review with someone from our team
                   </p>
                 </div>
               </div>
@@ -173,7 +174,8 @@ export default function PropertyValuationLandingPage() {
               <div className="flex flex-wrap gap-1.5">
                 {[
                   "Yes, I'm also buying next",
-                  "Book a 15-min pricing call",
+                  "Meet in person",
+                  "Google Meet / Zoom call",
                   "Send recent neighborhood comps",
                 ].map((chip) => (
                   <button
@@ -199,7 +201,7 @@ export default function PropertyValuationLandingPage() {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Reply to customize your report..."
+                  placeholder="Type a day, time, or meeting preference..."
                   className="flex-1 bg-[#111315] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-green-500"
                 />
                 <button

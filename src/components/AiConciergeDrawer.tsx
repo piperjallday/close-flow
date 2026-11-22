@@ -238,7 +238,7 @@ export default function AiConciergeDrawer({
               {lead ? lead.name : "Live AI Concierge Simulator"}
             </h2>
             <p className="text-xs text-gray-400">
-              {lead?.phone || lead?.email || "Test inbound buyer/tenant qualification in real time"}
+              {lead?.phone || lead?.email || "Test inbound buyer/seller qualification in real time"}
             </p>
           </div>
           <button
@@ -253,23 +253,23 @@ export default function AiConciergeDrawer({
         {/* Structured Qualification Brief */}
         <div className="p-4 bg-[#111315] border-b border-gray-800">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
-            Extracted Deal Profile
+            Extracted Lead Profile
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-[#1A1D1F] p-2.5 rounded-lg border border-gray-800">
-              <span className="text-gray-500 block text-[10px]">Asset Class</span>
+              <span className="text-gray-500 block text-[10px]">Client Intent</span>
               <span className="font-medium text-gray-200">{qualData.asset_type || "Pending..."}</span>
             </div>
             <div className="bg-[#1A1D1F] p-2.5 rounded-lg border border-gray-800">
-              <span className="text-gray-500 block text-[10px]">Submarket</span>
+              <span className="text-gray-500 block text-[10px]">Property / Area</span>
               <span className="font-medium text-gray-200">{qualData.location || "Pending..."}</span>
             </div>
             <div className="bg-[#1A1D1F] p-2.5 rounded-lg border border-gray-800">
-              <span className="text-gray-500 block text-[10px]">Budget / Size</span>
+              <span className="text-gray-500 block text-[10px]">Budget / Value</span>
               <span className="font-medium text-gray-200">{qualData.budget || "Pending..."}</span>
             </div>
             <div className="bg-[#1A1D1F] p-2.5 rounded-lg border border-gray-800">
-              <span className="text-gray-500 block text-[10px]">Timeline & Capital</span>
+              <span className="text-gray-500 block text-[10px]">Timeline & Financing</span>
               <span className="font-medium text-gray-200">
                 {[qualData.timeline, qualData.financing_status].filter(Boolean).join(" • ") || "Pending..."}
               </span>
@@ -277,7 +277,7 @@ export default function AiConciergeDrawer({
           </div>
           {qualData.summary && (
             <div className="mt-2.5 text-xs text-green-300 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-              <strong className="font-semibold">Broker Brief:</strong> {qualData.summary}
+              <strong className="font-semibold">Team Brief:</strong> {qualData.summary}
             </div>
           )}
         </div>
@@ -307,7 +307,7 @@ export default function AiConciergeDrawer({
                   <div
                     className={`px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
                       isLead
-                        ? "bg-[#22262A] text-gray-100 rounded-tl-xs border border-gray-700"
+                        ? "concierge-lead-bubble bg-[#22262A] text-gray-100 rounded-tl-xs border border-gray-700"
                         : "bg-green-600 text-white rounded-tr-xs"
                     }`}
                   >

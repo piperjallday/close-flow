@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       .join(" ")
       .toLowerCase();
 
+    const lowerMessage = message.toLowerCase();
     const knownAddress = extractKnownAddress(lead, userOnlyTranscript);
     const knownTimeline = extractKnownTimeline(lead, userOnlyTranscript);
 
@@ -101,8 +102,10 @@ export async function POST(request: Request) {
     const alreadyAnsweredBuyingNext = /buying next|also buying|buying another|not buying|just selling|only selling|don't have a property|no property/.test(
       fullLowerTranscript
     );
-    // Check FULL transcript so once a time/day is booked, subsequent messages ("thank you") stay confirmed
-    const alreadyBookedCall = /tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|\b\d{1,2}\s*(?:am|pm)\b|morning|afternoon|evening|walkthrough|comps|tour|showing/.test(
+    const alreadyBookedTime = /tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|\b\d{1,2}\s*(?:am|pm)\b|morning|afternoon|evening/.test(
+      fullLowerTranscript
+    );
+    const alreadyChoseMeetingFormat = /in person|in-person|google|zoom|video|phone call|over the phone/.test(
       fullLowerTranscript
     );
 
@@ -124,8 +127,11 @@ export async function POST(request: Request) {
     if (roleTag !== "Unclassified") score = Math.max(score, 50);
     if (knownAddress) score = Math.max(score, 70);
     if (knownTimeline) score = Math.max(score, 80);
-    if (hasPreApprovalInfo || alreadyAnsweredBuyingNext || alreadyBookedCall) {
+    if (hasPreApprovalInfo || alreadyAnsweredBuyingNext || alreadyBookedTime) {
       score = Math.max(score, 88);
+    }
+    if (alreadyBookedTime && alreadyChoseMeetingFormat) {
+      score = Math.max(score, 95);
     }
 
     const wantsTour = /tour|showing|see the home|walk through|schedule|appointment|call|saturday|sunday|tomorrow|\b\d{1,2}\s*(?:am|pm)\b/.test(
@@ -150,7 +156,8 @@ Detected Role: ${roleTag}
 ALREADY KNOWN FACTS (DO NOT ASK FOR THESE AGAIN):
 - Property Address: ${knownAddress || "Not yet provided"}
 - Target Timeline: ${knownTimeline || "Not yet provided"}
-- Appointment / Call Time Confirmed: ${alreadyBookedCall ? "YES — already provided by lead" : "Not yet"}
+- Day/Time Selected: ${alreadyBookedTime ? "YES" : "Not yet"}
+- Meeting Format (In-Person vs Google Meet/Zoom): ${alreadyChoseMeetingFormat ? "YES" : "Not yet"}
 - Partner Lender Available: ${
         partnerLender
           ? `${partnerLender.full_name} (${partnerLender.company}, ${partnerLender.phone})`
@@ -159,8 +166,9 @@ ALREADY KNOWN FACTS (DO NOT ASK FOR THESE AGAIN):
 
 STRICT RULES:
 1. NEVER ask for information listed under ALREADY KNOWN FACTS above.
-2. If Appointment / Call Time Confirmed is YES, warmly confirm that the advisor has everything needed and do NOT ask for another day/time.
-3. Keep replies concise (2-3 short sentences max).`;
+2. Always refer to the agent/brokerage as "someone from our team" (never say "senior advisor" or "advisor").
+3. When setting a meeting time, ask if they prefer an in-person meeting or a Google Meet / Zoom video call.
+4. Once both day/time and meeting format are confirmed, warmly let them know someone from our team has everything noted and will reach out to confirm. Keep replies concise (2-3 short sentences max).`;
 
       const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -191,38 +199,46 @@ STRICT RULES:
       const lastAssistantMsg =
         [...history].reverse().find((m: any) => m.role === "assistant")?.content || "";
 
-      if (roleTag === "Unclassified") {
+      if (/comp|comparable|recent sales/i.test(lowerMessage)) {
+        aiReply = `Got it, ${firstName}! Someone from our team is pulling the recent neighborhood comparable sales${
+          knownAddress ? ` for ${knownAddress}` : ""
+        } and will have them ready for you${
+          alreadyChoseMeetingFormat
+            ? "."
+            : "—would you prefer to review them in person or on a quick Google Meet / Zoom call?"
+        }`;
+      } else if (roleTag === "Unclassified") {
         aiReply = `Thanks ${firstName}! Just to make sure I point you in the right direction—are you looking to buy a home, sell your current property, or both?`;
       } else if (roleTag.includes("Seller")) {
         if (!knownAddress) {
           aiReply = `No problem at all, ${firstName}—we can line up your next home search once we value your current place. What is the street address of the property you're thinking of selling?`;
         } else if (!knownTimeline) {
-          aiReply = `Got it, ${firstName}—we have ${knownAddress} pulled up! What is your ideal timeline for selling, and what day/time works best for a quick 15-minute pricing call?`;
-        } else if (alreadyBookedCall) {
-          aiReply = `You're very welcome, ${firstName}! You're all set—our senior advisor has your ${knownAddress} details and will reach out at your confirmed time.`;
+          aiReply = `Got it, ${firstName}—we have ${knownAddress} pulled up! What is your ideal timeline for selling, and what day/time works best to connect with someone from our team (in person or via Google Meet / Zoom)?`;
+        } else if (!alreadyBookedTime) {
+          aiReply = `Thanks ${firstName}! We have ${knownAddress} and your ${knownTimeline} timeline noted. What day and time works best to connect with someone from our team, and do you prefer an in-person meeting or a Google Meet / Zoom call?`;
+        } else if (!alreadyChoseMeetingFormat) {
+          aiReply = `Got that time locked in, ${firstName}! Would you prefer to meet in person at ${knownAddress} or hop on a quick Google Meet / Zoom video call with someone from our team?`;
         } else {
-          aiReply = `Thanks ${firstName}! We have ${knownAddress} and your ${knownTimeline} timeline noted. What day and time works best for a quick 15-minute pricing & net-proceeds call with our advisor?`;
+          aiReply = `You're all set, ${firstName}! Someone from our team has your ${knownAddress} details and meeting preference noted and will reach out shortly to confirm.`;
         }
       } else {
         if (needsLenderWarmTransfer && partnerLender) {
           aiReply = `Got it, ${firstName}! I can connect you with our partner loan officer ${partnerLender.full_name} at ${partnerLender.company} (${partnerLender.phone}) for a fast pre-approval${
             knownAddress ? ` for ${knownAddress}` : ""
-          }. What day/time works best for a quick call or tour?`;
-        } else if (alreadyBookedCall) {
-          aiReply = `You're all set, ${firstName}! Our advisor has everything confirmed${
+          }. What day/time works best to connect with someone from our team (in person or via Google Meet / Zoom)?`;
+        } else if (!alreadyBookedTime) {
+          aiReply = `Awesome, ${firstName}! What day and time works best for a private tour or quick intro with someone from our team, and do you prefer in person or Google Meet / Zoom?`;
+        } else if (!alreadyChoseMeetingFormat) {
+          aiReply = `Got that time noted, ${firstName}! Would you prefer an in-person walkthrough or a Google Meet / Zoom call with someone from our team?`;
+        } else {
+          aiReply = `You're all set, ${firstName}! Someone from our team has everything confirmed${
             knownAddress ? ` for ${knownAddress}` : ""
           } and will follow up shortly.`;
-        } else if (knownAddress && knownTimeline) {
-          aiReply = `Awesome, ${firstName}—we have your ${knownTimeline} timeline noted${
-            knownAddress ? ` for ${knownAddress}` : ""
-          }. What day and time works best for a private tour?`;
-        } else {
-          aiReply = `Awesome, ${firstName}! What is your target timeline to move and have you already been pre-approved with a lender?`;
         }
       }
 
       if (aiReply === lastAssistantMsg) {
-        aiReply = `You're all set, ${firstName}! Our advisor has your updated notes${
+        aiReply = `You're all set, ${firstName}! Someone from our team has your updated notes${
           knownAddress ? ` for ${knownAddress}` : ""
         } and will be in touch shortly.`;
       }
@@ -240,7 +256,6 @@ STRICT RULES:
       nextStatus = "Contacted";
     }
 
-    // Deduplicate history if the caller already appended the latest user message
     const baseHistory = Array.isArray(history) ? [...history] : [];
     const lastItem = baseHistory[baseHistory.length - 1];
     if (
