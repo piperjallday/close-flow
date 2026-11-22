@@ -167,42 +167,42 @@ html[data-theme="light"] [class*="bg-black/9"] {
 /* -------------------------------------------------------------------------- */
 
 /* Force all hardcoded dark background classes to white in Light Mode */
-html[data-theme="light"] [class*="bg-[#111315]"],
-html[data-theme="light"] [class*="bg-[#1A1D1F]"],
-html[data-theme="light"] [class*="bg-[#24282B]"],
-html[data-theme="light"] [class*="bg-[#2A2E32]"],
-html[data-theme="light"] [class*="bg-black"] {
+html:not(.dark) [class*="bg-[#111315]"],
+html:not(.dark) [class*="bg-[#1A1D1F]"],
+html:not(.dark) [class*="bg-[#24282B]"],
+html:not(.dark) [class*="bg-[#2A2E32]"],
+html:not(.dark) [class*="bg-black"] {
   background-color: #ffffff !important;
   color: #111827 !important;
 }
 
 /* Force dark borders to light gray */
-html[data-theme="light"] [class*="border-gray-700"],
-html[data-theme="light"] [class*="border-gray-800"] {
+html:not(.dark) [class*="border-gray-700"],
+html:not(.dark) [class*="border-gray-800"] {
   border-color: #e5e7eb !important;
 }
 
 /* Force dark gray text to readable dark charcoal */
-html[data-theme="light"] [class*="text-gray-100"],
-html[data-theme="light"] [class*="text-gray-200"],
-html[data-theme="light"] [class*="text-gray-300"] {
+html:not(.dark) [class*="text-gray-100"],
+html:not(.dark) [class*="text-gray-200"],
+html:not(.dark) [class*="text-gray-300"] {
   color: #111827 !important;
 }
 
-html[data-theme="light"] [class*="text-gray-400"] {
+html:not(.dark) [class*="text-gray-400"] {
   color: #4b5563 !important;
 }
 
 /* Fix Google Maps Native Controls (Map/Satellite toggle) & Info Windows */
-html[data-theme="light"] .gm-style-iw,
-html[data-theme="light"] .gm-style-iw-c,
-html[data-theme="light"] .gm-style .gm-style-mtc button,
-html[data-theme="light"] .gm-control-active {
+html:not(.dark) .gm-style-iw,
+html:not(.dark) .gm-style-iw-c,
+html:not(.dark) .gm-style .gm-style-mtc button,
+html:not(.dark) .gm-control-active {
   background-color: #ffffff !important;
   color: #111827 !important;
 }
 
-html[data-theme="light"] .gm-style-iw-d,
-html[data-theme="light"] .gm-style .gm-style-mtc button {
+html:not(.dark) .gm-style-iw-d,
+html:not(.dark) .gm-style .gm-style-mtc button {
   color: #111827 !important;
 }
