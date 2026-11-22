@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Building2, MapPin, CheckCircle2, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import {
+  Building2, MapPin, CheckCircle2, Sparkles, ArrowRight, ShieldCheck, Maximize2
+} from "lucide-react";
 import { createClient } from "../../../lib/supabase/client";
 
 export default function PublicPropertyLandingPage() {
@@ -112,13 +114,29 @@ export default function PublicPropertyLandingPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-        {/* Left: Property Highlights */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+        {/* Left: Property Hero + Highlights */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="inline-flex items-center gap-2 bg-[#1A1D1F] border border-gray-800 text-xs text-green-400 px-3 py-1.5 rounded-full">
-            <Building2 size={14} />
-            <span>Exclusive Property • {listing.tag || "Featured"}</span>
-          </div>
+          {listing.image_url && (
+            <div className="relative rounded-2xl overflow-hidden border border-gray-800 bg-[#1A1D1F] aspect-video">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={listing.image_url}
+                alt={listing.address}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-xs border border-gray-700 text-xs text-green-400 px-3 py-1 rounded-full font-medium">
+                {listing.tag || "Featured Property"}
+              </div>
+            </div>
+          )}
+
+          {!listing.image_url && (
+            <div className="inline-flex items-center gap-2 bg-[#1A1D1F] border border-gray-800 text-xs text-green-400 px-3 py-1.5 rounded-full">
+              <Building2 size={14} />
+              <span>Exclusive Property • {listing.tag || "Featured"}</span>
+            </div>
+          )}
 
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
             {listing.address}
@@ -140,15 +158,25 @@ export default function PublicPropertyLandingPage() {
                 <span>{listing.baths} Baths</span>
               </>
             )}
+            {Number(listing.sqft) > 0 && (
+              <>
+                <span className="text-gray-600">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <Maximize2 size={13} className="text-gray-400" />
+                  {Number(listing.sqft).toLocaleString()} SqFt
+                </span>
+              </>
+            )}
           </div>
 
           <div className="bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <MapPin size={16} className="text-green-400" />
-              <span>Property Package & Private Showing Access</span>
+              <span>Property Overview & Private Showing Access</span>
             </div>
-            <p className="text-sm text-gray-400 leading-relaxed">
-              Request the complete property packet, floor plans, disclosures, or schedule a private tour. Our AI Concierge will connect you directly with our listing advisor.
+            <p className="text-sm text-gray-300 leading-relaxed">
+              {listing.description ||
+                "Request the complete property packet, floor plans, disclosures, or schedule a private tour. Our AI Concierge will connect you directly with our listing advisor."}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
               <div className="bg-[#111315] border border-gray-800 rounded-xl p-3">
@@ -168,7 +196,7 @@ export default function PublicPropertyLandingPage() {
         </div>
 
         {/* Right: Lead Capture Funnel Card */}
-        <div className="lg:col-span-5 bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="lg:col-span-5 bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-2xl sticky top-8">
           {submittedReply ? (
             <div className="space-y-5 text-center py-4">
               <div className="w-12 h-12 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 flex items-center justify-center mx-auto">

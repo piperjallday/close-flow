@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import AiConciergeDrawer, { LeadRecord } from "../components/AiConciergeDrawer";
+import SocialAutoposterModal from "../components/SocialAutoposterModal";
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Building, DollarSign, Contact, CheckSquare,
   Workflow, BarChart as BarChartIcon, Settings, Search, Bell,
-  MoreHorizontal, Mail, Home, Star, LogOut, Plus, X, Trash2
+  MoreHorizontal, Mail, Home, Star, LogOut, Plus, X, Trash2, Share2
 } from "lucide-react";
 import { AreaChart } from "@tremor/react";
 import { createClient } from "../lib/supabase/client";
@@ -79,6 +80,9 @@ export default function DashboardClient({
   // AI Concierge Drawer State
   const [activeConciergeLead, setActiveConciergeLead] = useState<LeadRecord | null>(null);
   const [isConciergeOpen, setIsConciergeOpen] = useState(false);
+
+  // Social Autoposter Studio State
+  const [socialListing, setSocialListing] = useState<any | null>(null);
 
   const [selectedListingId, setSelectedListingId] = useState<string | null>(
     initialListings[0]?.id || null
@@ -222,6 +226,7 @@ export default function DashboardClient({
     title: "",
     icon_name: "mail",
     status: "Active",
+    trigger_stage: "New Leads",
     subtext: "triggered today",
   });
 
@@ -234,8 +239,11 @@ export default function DashboardClient({
     price: "",
     beds: "3",
     baths: "2",
+    sqft: "",
     status: "For Sale",
     tag: "New",
+    image_url: "",
+    description: "",
   });
 
   useEffect(() => {
@@ -288,6 +296,7 @@ export default function DashboardClient({
       .from("leads")
       .insert([
         {
+          tenant_id: tenantId,
           full_name: newLead.full_name.trim(),
           email: newLead.email.trim() || null,
           phone: newLead.phone.trim() || null,
@@ -320,7 +329,7 @@ export default function DashboardClient({
     }
   };
 
-  // Move lead between Kanban stages
+  // Move lead between Kanban stages + fire stage-triggered drip workflows
   const handleStageChange = async (leadId: string, newStatus: string) => {
     const previousLeads = [...leads];
     setLeads((prev) =>
@@ -335,7 +344,18 @@ export default function DashboardClient({
     if (error) {
       console.error("Failed to update lead stage:", error.message);
       setLeads(previousLeads);
+      return;
     }
+
+    fetch("/api/workflows/trigger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenantId,
+        leadId,
+        stage: newStatus,
+      }),
+    }).catch((err) => console.error("Workflow trigger error:", err));
   };
 
   // Delete lead from Kanban & Supabase
@@ -386,11 +406,13 @@ export default function DashboardClient({
       .from("workflows")
       .insert([
         {
+          tenant_id: tenantId,
           title: newWorkflow.title.trim(),
           icon_name: newWorkflow.icon_name,
           status: newWorkflow.status,
+          trigger_stage: newWorkflow.trigger_stage,
           triggers_count: 0,
-          subtext: newWorkflow.subtext.trim() || "triggers",
+          subtext: newWorkflow.subtext.trim() || `On "${newWorkflow.trigger_stage}"`,
         },
       ])
       .select()
@@ -409,6 +431,7 @@ export default function DashboardClient({
         title: "",
         icon_name: "mail",
         status: "Active",
+        trigger_stage: "New Leads",
         subtext: "triggered today",
       });
       setIsWorkflowModalOpen(false);
@@ -427,12 +450,16 @@ export default function DashboardClient({
       .from("listings")
       .insert([
         {
+          tenant_id: tenantId,
           address: newListing.address.trim(),
           price: Number(newListing.price) || 0,
           beds: Number(newListing.beds) || 0,
           baths: Number(newListing.baths) || 0,
+          sqft: Number(newListing.sqft) || 0,
           status: newListing.status,
           tag: newListing.tag.trim() || "New",
+          image_url: newListing.image_url.trim() || null,
+          description: newListing.description.trim() || null,
         },
       ])
       .select()
@@ -453,8 +480,11 @@ export default function DashboardClient({
         price: "",
         beds: "3",
         baths: "2",
+        sqft: "",
         status: "For Sale",
         tag: "New",
+        image_url: "",
+        description: "",
       });
       setIsListingModalOpen(false);
     }
@@ -729,7 +759,7 @@ export default function DashboardClient({
             </span>
           </div>
 
-          {/* Top Row: Metrics (compact) & Kanban (independent scroll/stretch) */}
+          {/* Top Row: Metrics & Kanban */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6 items-start">
             {/* Key Metrics Overview Card */}
             <div className="bg-[#24282B] rounded-xl p-6 border border-gray-800 flex flex-col">
@@ -809,7 +839,7 @@ export default function DashboardClient({
             <div className="bg-[#24282B] rounded-xl p-6 border border-gray-800 flex flex-col">
               <div className="flex flex-wrap justify-between items-center gap-2 mb-6">
                 <h2 className="text-lg font-medium text-gray-200">Lead Pipeline (Kanban)</h2>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => copyPublicLink("valuation", `/valuation/${tenantId}`)}
@@ -818,6 +848,21 @@ export default function DashboardClient({
                     {copiedLinkKey === "valuation"
                       ? "✓ Valuation Link Copied!"
                       : "Copy Property Valuation Link"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSocialListing({
+                        address: "Free Home & Property Valuation Report",
+                        tag: "Seller Valuation Funnel",
+                        description:
+                          "Curious what your home or investment property is worth in today's market? Get a custom market report and comparable sales breakdown.",
+                      })
+                    }
+                    className="inline-flex items-center gap-1 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Share2 size={12} />
+                    <span>Autopost Valuation</span>
                   </button>
                   <button
                     onClick={() => setIsAddModalOpen(true)}
@@ -932,6 +977,7 @@ export default function DashboardClient({
                         onCopyLink={() =>
                           copyPublicLink(`listing_${item.id}`, `/p/${item.id}`)
                         }
+                        onAutopost={() => setSocialListing(item)}
                         onSelect={() => setSelectedListingId(item.id)}
                         onStatusChange={(nextStatus) =>
                           handleListingStatusChange(item.id, nextStatus)
@@ -974,6 +1020,14 @@ export default function DashboardClient({
             prev && prev.id === updated.id ? { ...prev, ...updated } : prev
           );
         }}
+      />
+
+      {/* Social & Video Autoposter Studio Modal */}
+      <SocialAutoposterModal
+        isOpen={Boolean(socialListing)}
+        onClose={() => setSocialListing(null)}
+        tenantId={tenantId}
+        listing={socialListing}
       />
 
       {/* Add Lead Modal */}
@@ -1128,18 +1182,19 @@ export default function DashboardClient({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Icon</label>
+                  <label className="block text-xs text-gray-400 mb-1">Trigger Stage</label>
                   <select
-                    value={newWorkflow.icon_name}
+                    value={newWorkflow.trigger_stage}
                     onChange={(e) =>
-                      setNewWorkflow({ ...newWorkflow, icon_name: e.target.value })
+                      setNewWorkflow({ ...newWorkflow, trigger_stage: e.target.value })
                     }
                     className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
                   >
-                    <option value="mail">Email (Mail)</option>
-                    <option value="home">Property (Home)</option>
-                    <option value="users">Nurture (Users)</option>
-                    <option value="star">Review (Star)</option>
+                    {PIPELINE_STAGES.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1155,15 +1210,32 @@ export default function DashboardClient({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Trigger Subtext</label>
-                <input
-                  type="text"
-                  value={newWorkflow.subtext}
-                  onChange={(e) => setNewWorkflow({ ...newWorkflow, subtext: e.target.value })}
-                  placeholder="triggered today"
-                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Icon</label>
+                  <select
+                    value={newWorkflow.icon_name}
+                    onChange={(e) =>
+                      setNewWorkflow({ ...newWorkflow, icon_name: e.target.value })
+                    }
+                    className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
+                  >
+                    <option value="mail">Email / SMS (Mail)</option>
+                    <option value="home">Property (Home)</option>
+                    <option value="users">Nurture (Users)</option>
+                    <option value="star">Review (Star)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Trigger Subtext</label>
+                  <input
+                    type="text"
+                    value={newWorkflow.subtext}
+                    onChange={(e) => setNewWorkflow({ ...newWorkflow, subtext: e.target.value })}
+                    placeholder="triggered today"
+                    className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
@@ -1190,7 +1262,7 @@ export default function DashboardClient({
       {/* Add Listing Modal */}
       {isListingModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-[#24282B] border border-gray-700 rounded-xl w-full max-w-md p-6 shadow-2xl">
+          <div className="bg-[#24282B] border border-gray-700 rounded-xl w-full max-w-md p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-semibold text-white">Add Property Listing</h3>
               <button
@@ -1220,7 +1292,7 @@ export default function DashboardClient({
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Price ($) *</label>
                   <input
@@ -1233,7 +1305,20 @@ export default function DashboardClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Beds</label>
+                  <label className="block text-xs text-gray-400 mb-1">Square Feet (SqFt)</label>
+                  <input
+                    type="number"
+                    value={newListing.sqft}
+                    onChange={(e) => setNewListing({ ...newListing, sqft: e.target.value })}
+                    placeholder="2450"
+                    className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Beds / Units</label>
                   <input
                     type="number"
                     value={newListing.beds}
@@ -1251,6 +1336,28 @@ export default function DashboardClient({
                     className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Hero Photo URL (Optional)</label>
+                <input
+                  type="url"
+                  value={newListing.image_url}
+                  onChange={(e) => setNewListing({ ...newListing, image_url: e.target.value })}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Property Highlights / Description</label>
+                <textarea
+                  rows={2}
+                  value={newListing.description}
+                  onChange={(e) => setNewListing({ ...newListing, description: e.target.value })}
+                  placeholder="Turnkey property with updated finishes, prime location, and strong value..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1574,6 +1681,7 @@ function ListingItem({
   isSelected = false,
   isLinkCopied = false,
   onCopyLink,
+  onAutopost,
   onSelect,
   onStatusChange,
   onDelete,
@@ -1586,6 +1694,7 @@ function ListingItem({
   isSelected?: boolean;
   isLinkCopied?: boolean;
   onCopyLink: () => void;
+  onAutopost: () => void;
   onSelect: () => void;
   onStatusChange: (nextStatus: string) => void;
   onDelete: () => void;
@@ -1623,12 +1732,23 @@ function ListingItem({
           </button>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <div>
           <span className="text-gray-300 font-medium">{price}</span>
           <span className="text-gray-500 ml-2">{specs}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAutopost();
+            }}
+            className="inline-flex items-center gap-1 text-[10px] bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 px-2 py-0.5 rounded transition-colors cursor-pointer"
+          >
+            <Share2 size={10} />
+            <span>Autopost</span>
+          </button>
           <button
             type="button"
             onClick={(e) => {
