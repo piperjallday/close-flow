@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { createClient } from "../lib/supabase/client";
 
 export interface ConciergeMessage {
   role: "user" | "assistant";
@@ -44,6 +45,7 @@ export default function AiConciergeDrawer({
   onClose,
   onLeadUpdated,
 }: AiConciergeDrawerProps) {
+  const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<ConciergeMessage[]>([]);
   const [score, setScore] = useState<number>(0);
   const [status, setStatus] = useState<string>("qualifying");
@@ -53,22 +55,82 @@ export default function AiConciergeDrawer({
   const [error, setError] = useState("");
   const threadEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Sync initial lead state + fetch latest record on open
   useEffect(() => {
-    if (lead) {
-      setMessages(Array.isArray(lead.conversation_history) ? lead.conversation_history : []);
-      setScore(lead.qualification_score || 0);
-      setStatus(lead.status || "new");
-      setQualData(lead.qualification_data || {});
-      setError("");
-    } else {
-      // Sandbox simulation mode when opened without a specific lead
+    if (!isOpen) return;
+
+    if (!lead) {
       setMessages([]);
       setScore(0);
       setStatus("qualifying");
       setQualData({});
       setError("");
+      return;
     }
-  }, [lead, isOpen]);
+
+    setMessages(Array.isArray(lead.conversation_history) ? lead.conversation_history : []);
+    setScore(lead.qualification_score || 0);
+    setStatus(lead.status || "new");
+    setQualData(lead.qualification_data || {});
+    setError("");
+
+    supabase
+      .from("leads")
+      .select("*")
+      .eq("id", lead.id)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        if (Array.isArray(data.conversation_history)) {
+          setMessages(data.conversation_history);
+        }
+        setScore(Number(data.qualification_score ?? data.intent_score ?? 0));
+        if (data.status) setStatus(data.status);
+        if (data.qualification_data) setQualData(data.qualification_data);
+      });
+  }, [lead, isOpen, supabase]);
+
+  // Live Realtime updates while the drawer is open (captures landing page & SMS replies instantly)
+  useEffect(() => {
+    if (!isOpen || !lead?.id) return;
+
+    const channel = supabase
+      .channel(`concierge-lead-${lead.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "leads",
+          filter: `id=eq.${lead.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (Array.isArray(updated.conversation_history)) {
+            setMessages(updated.conversation_history);
+          }
+          setScore(Number(updated.qualification_score ?? updated.intent_score ?? 0));
+          if (updated.status) setStatus(updated.status);
+          if (updated.qualification_data) setQualData(updated.qualification_data);
+
+          if (onLeadUpdated) {
+            onLeadUpdated({
+              id: lead.id,
+              qualification_score: updated.qualification_score ?? updated.intent_score ?? 0,
+              status: updated.status,
+              qualification_data: updated.qualification_data,
+              conversation_history: updated.conversation_history,
+              notes: updated.notes,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, lead?.id, supabase, onLeadUpdated]);
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -85,8 +147,9 @@ export default function AiConciergeDrawer({
     setError("");
     setInputMessage("");
 
+    const priorHistory = [...messages];
     const optimisticHistory: ConciergeMessage[] = [
-      ...messages,
+      ...priorHistory,
       { role: "user", content: text, timestamp: new Date().toISOString() },
     ];
     setMessages(optimisticHistory);
@@ -99,7 +162,7 @@ export default function AiConciergeDrawer({
           leadId: lead?.id || null,
           leadName: lead?.name || "Prospective Buyer",
           message: text,
-          history: messages,
+          history: priorHistory,
           existingData: qualData,
         }),
       });
@@ -109,19 +172,37 @@ export default function AiConciergeDrawer({
         throw new Error(data.error || "Failed to generate AI Concierge reply");
       }
 
-      setMessages(data.history || optimisticHistory);
-      setScore(data.score ?? score);
-      setStatus(data.status || status);
-      setQualData(data.qualificationData || qualData);
+      const nextMessages: ConciergeMessage[] =
+        data.conversation_history ||
+        data.history || [
+          ...optimisticHistory,
+          ...(data.reply
+            ? [{ role: "assistant" as const, content: data.reply, timestamp: new Date().toISOString() }]
+            : []),
+        ];
+
+      const nextScore = data.qualification_score ?? data.score ?? score;
+      const nextStatus = data.status || status;
+      const nextQualData = data.qualificationData || {
+        ...qualData,
+        ...(data.classification && data.classification !== "Unclassified"
+          ? { asset_type: data.classification }
+          : {}),
+      };
+
+      setMessages(nextMessages);
+      setScore(nextScore);
+      setStatus(nextStatus);
+      setQualData(nextQualData);
 
       if (lead?.id && onLeadUpdated) {
         onLeadUpdated({
           id: lead.id,
-          qualification_score: data.score,
-          status: data.status,
-          qualification_data: data.qualificationData,
-          conversation_history: data.history,
-          notes: data.qualificationData?.summary || lead.notes,
+          qualification_score: nextScore,
+          status: nextStatus,
+          qualification_data: nextQualData,
+          conversation_history: nextMessages,
+          notes: nextQualData?.summary || lead.notes,
         });
       }
     } catch (err: unknown) {
@@ -207,11 +288,7 @@ export default function AiConciergeDrawer({
             <div className="text-center text-xs text-gray-500 my-10 px-6 space-y-2">
               <p className="text-gray-300 font-medium">No messages yet in this thread.</p>
               <p>
-                Send a sample prospect message below (e.g.,{" "}
-                <span className="text-gray-300 italic">
-                  &ldquo;Hi, looking for a 10,000 sq ft warehouse near Jacksonville under $2.5M&rdquo;
-                </span>
-                ) to watch the AI Concierge qualify and score the lead.
+                Send a sample prospect message below to watch the AI Concierge qualify and score the lead.
               </p>
             </div>
           ) : (

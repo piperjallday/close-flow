@@ -11,7 +11,6 @@ function extractKnownAddress(lead: any, transcript: string): string {
   }
 
   const combined = `${lead?.notes || ""} ${transcript}`;
-  // Match standard street addresses OR number + street + city/state/zip (e.g. "220 Lane Jacksonville FL 32254")
   const addressMatch =
     combined.match(
       /\b\d{1,6}\s+[A-Za-z0-9.\-'\s]{2,45}\b(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Blvd|Boulevard|Way|Pl|Place|Cir|Circle|Ter|Terrace|Pkwy|Parkway)\b(?:,?\s*[A-Za-z\s]{2,25}(?:,?\s*[A-Z]{2})?(?:\s*\d{5})?)?/i
@@ -77,7 +76,6 @@ export async function POST(request: Request) {
     const workspaceName = tenant?.name || "CloseFlow Real Estate";
     const partnerLender = lenders?.[0] || null;
 
-    // Exclude assistant messages when extracting user-provided facts so AI prompts don't trigger false positives
     const userOnlyTranscript = [
       ...history
         .filter((m: any) => m.role === "user")
@@ -103,11 +101,11 @@ export async function POST(request: Request) {
     const alreadyAnsweredBuyingNext = /buying next|also buying|buying another|not buying|just selling|only selling|don't have a property|no property/.test(
       fullLowerTranscript
     );
-    const alreadyBookedCall = /call|walkthrough|comps|tour|showing|saturday|sunday|tomorrow|morning|afternoon|evening/.test(
-      message.toLowerCase()
+    // Check FULL transcript so once a time/day is booked, subsequent messages ("thank you") stay confirmed
+    const alreadyBookedCall = /tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|\b\d{1,2}\s*(?:am|pm)\b|morning|afternoon|evening|walkthrough|comps|tour|showing/.test(
+      fullLowerTranscript
     );
 
-    // Classify Buyer vs Seller vs Both
     const isSeller =
       /sell|selling|valuation|home value|worth|list my|listing my|equity|cma|owner valuation/.test(
         fullLowerTranscript
@@ -122,7 +120,6 @@ export async function POST(request: Request) {
     else if (isSeller) roleTag = "Seller";
     else if (isBuyer) roleTag = "Buyer";
 
-    // Calculate LPMAMA qualification score (0-100)
     let score = Number(lead?.qualification_score ?? lead?.intent_score ?? 25);
     if (roleTag !== "Unclassified") score = Math.max(score, 50);
     if (knownAddress) score = Math.max(score, 70);
@@ -131,11 +128,11 @@ export async function POST(request: Request) {
       score = Math.max(score, 88);
     }
 
-    const wantsTour = /tour|showing|see the home|walk through|schedule|appointment|call|saturday|sunday|tomorrow/.test(
-      message.toLowerCase()
+    const wantsTour = /tour|showing|see the home|walk through|schedule|appointment|call|saturday|sunday|tomorrow|\b\d{1,2}\s*(?:am|pm)\b/.test(
+      fullLowerTranscript
     );
     const wantsOffer = /write an offer|make an offer|submit an offer|put in an offer/.test(
-      message.toLowerCase()
+      fullLowerTranscript
     );
 
     const needsLenderWarmTransfer =
@@ -153,8 +150,7 @@ Detected Role: ${roleTag}
 ALREADY KNOWN FACTS (DO NOT ASK FOR THESE AGAIN):
 - Property Address: ${knownAddress || "Not yet provided"}
 - Target Timeline: ${knownTimeline || "Not yet provided"}
-- Buying Next Home Info: ${alreadyAnsweredBuyingNext ? "Already answered by lead" : "Unknown"}
-- Pre-Approval / Financing Info: ${hasPreApprovalInfo ? "Already provided" : "Unknown"}
+- Appointment / Call Time Confirmed: ${alreadyBookedCall ? "YES — already provided by lead" : "Not yet"}
 - Partner Lender Available: ${
         partnerLender
           ? `${partnerLender.full_name} (${partnerLender.company}, ${partnerLender.phone})`
@@ -162,9 +158,9 @@ ALREADY KNOWN FACTS (DO NOT ASK FOR THESE AGAIN):
       }
 
 STRICT RULES:
-1. NEVER ask for information listed under ALREADY KNOWN FACTS above. Always acknowledge what the user just said first.
-2. Keep replies concise (2-3 short sentences max) and ask only ONE logical next question.
-3. For Sellers / Buyer+Sellers: Once Property Address is known, ask for their ideal timeline if missing, or propose a 15-minute pricing & net-proceeds call.`;
+1. NEVER ask for information listed under ALREADY KNOWN FACTS above.
+2. If Appointment / Call Time Confirmed is YES, warmly confirm that the advisor has everything needed and do NOT ask for another day/time.
+3. Keep replies concise (2-3 short sentences max).`;
 
       const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -190,7 +186,6 @@ STRICT RULES:
       aiReply = openaiData?.choices?.[0]?.message?.content?.trim() || "";
     }
 
-    // Smart context-aware fallback (never repeats already-known fields or the previous AI message)
     if (!aiReply) {
       const firstName = (lead?.full_name || "there").split(" ")[0];
       const lastAssistantMsg =
@@ -204,7 +199,7 @@ STRICT RULES:
         } else if (!knownTimeline) {
           aiReply = `Got it, ${firstName}—we have ${knownAddress} pulled up! What is your ideal timeline for selling, and what day/time works best for a quick 15-minute pricing call?`;
         } else if (alreadyBookedCall) {
-          aiReply = `Perfect, ${firstName}! Our senior advisor is preparing the comparable sales breakdown for ${knownAddress} (${knownTimeline}) and will reach out shortly to confirm.`;
+          aiReply = `You're very welcome, ${firstName}! You're all set—our senior advisor has your ${knownAddress} details and will reach out at your confirmed time.`;
         } else {
           aiReply = `Thanks ${firstName}! We have ${knownAddress} and your ${knownTimeline} timeline noted. What day and time works best for a quick 15-minute pricing & net-proceeds call with our advisor?`;
         }
@@ -214,9 +209,9 @@ STRICT RULES:
             knownAddress ? ` for ${knownAddress}` : ""
           }. What day/time works best for a quick call or tour?`;
         } else if (alreadyBookedCall) {
-          aiReply = `You're all set, ${firstName}! Our advisor will confirm your showing details${
+          aiReply = `You're all set, ${firstName}! Our advisor has everything confirmed${
             knownAddress ? ` for ${knownAddress}` : ""
-          } right away.`;
+          } and will follow up shortly.`;
         } else if (knownAddress && knownTimeline) {
           aiReply = `Awesome, ${firstName}—we have your ${knownTimeline} timeline noted${
             knownAddress ? ` for ${knownAddress}` : ""
@@ -226,15 +221,13 @@ STRICT RULES:
         }
       }
 
-      // Hard anti-repeat guard: never send the exact same reply twice in a row
       if (aiReply === lastAssistantMsg) {
-        aiReply = `Thanks for sharing that, ${firstName}! I've updated your file${
+        aiReply = `You're all set, ${firstName}! Our advisor has your updated notes${
           knownAddress ? ` for ${knownAddress}` : ""
-        }. What day and time works best for a quick 15-minute call with our advisor?`;
+        } and will be in touch shortly.`;
       }
     }
 
-    // Auto-advance Kanban stage based on qualification milestones
     let nextStatus = lead?.status || "New Leads";
     if (wantsOffer && nextStatus !== "Closed Deals") {
       nextStatus = "Fav Offers";
@@ -247,9 +240,23 @@ STRICT RULES:
       nextStatus = "Contacted";
     }
 
+    // Deduplicate history if the caller already appended the latest user message
+    const baseHistory = Array.isArray(history) ? [...history] : [];
+    const lastItem = baseHistory[baseHistory.length - 1];
+    if (
+      !lastItem ||
+      lastItem.role !== "user" ||
+      String(lastItem.content || "").trim() !== String(message).trim()
+    ) {
+      baseHistory.push({
+        role: "user",
+        content: message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const updatedHistory = [
-      ...history,
-      { role: "user", content: message, timestamp: new Date().toISOString() },
+      ...baseHistory,
       { role: "assistant", content: aiReply, timestamp: new Date().toISOString() },
     ];
 
@@ -266,6 +273,7 @@ STRICT RULES:
         status: nextStatus,
         qualification_data: {
           ...(lead?.qualification_data || {}),
+          ...(roleTag !== "Unclassified" ? { asset_type: roleTag } : {}),
           ...(knownAddress ? { location: knownAddress } : {}),
           ...(knownTimeline ? { timeline: knownTimeline } : {}),
         },
@@ -281,6 +289,7 @@ STRICT RULES:
       qualification_score: score,
       intent_score: score,
       status: nextStatus,
+      conversation_history: updatedHistory,
       lenderRouted: needsLenderWarmTransfer,
     });
   } catch (err: unknown) {
