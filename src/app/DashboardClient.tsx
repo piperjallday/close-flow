@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import AiConciergeDrawer, { LeadRecord } from "../components/AiConciergeDrawer";
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Users, Building, DollarSign, Contact, CheckSquare,
@@ -60,12 +61,9 @@ export default function DashboardClient({
   userEmail,
   userRole = "agent",
   tenantId,
-  themeMode = "dark",
-  brandColor = "#22c55e",
   leads: initialLeads,
   listings: initialListings,
   workflows: initialWorkflows,
-  partnerLenders: initialPartnerLenders = [],
 }: DashboardProps) {
   const supabase = createClient();
   const [today, setToday] = useState("");
@@ -73,6 +71,11 @@ export default function DashboardClient({
   const [listings, setListings] = useState<any[]>(initialListings);
   const [workflows, setWorkflows] = useState<any[]>(initialWorkflows);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // AI Concierge Drawer State
+  const [activeConciergeLead, setActiveConciergeLead] = useState<LeadRecord | null>(null);
+  const [isConciergeOpen, setIsConciergeOpen] = useState(false);
+
   const [selectedListingId, setSelectedListingId] = useState<string | null>(
     initialListings[0]?.id || null
   );
@@ -80,13 +83,7 @@ export default function DashboardClient({
   // Drag-and-Drop Kanban State
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
-
-  // Public Capture Links & LPMAMA AI Qualifier Drawer State
   const [copiedLinkKey, setCopiedLinkKey] = useState<string | null>(null);
-  const [activeLpmamaLead, setActiveLpmamaLead] = useState<any | null>(null);
-  const [lpmamaEvents, setLpmamaEvents] = useState<any[]>([]);
-  const [prospectReplyInput, setProspectReplyInput] = useState("");
-  const [isQualifying, setIsQualifying] = useState(false);
 
   // Real-time Team Sync across Leads, Listings, and Workflows
   useEffect(() => {
@@ -233,9 +230,9 @@ export default function DashboardClient({
   }, []);
 
   const handleSignOut = async () => {
-  await supabase.auth.signOut();
-  window.location.href = "/";
-};;
+    await supabase.auth.signOut();
+    window.location.href = "/";
+  };
 
   const copyPublicLink = (key: string, path: string) => {
     const fullUrl = `${window.location.origin}${path}`;
@@ -244,56 +241,20 @@ export default function DashboardClient({
     setTimeout(() => setCopiedLinkKey(null), 2000);
   };
 
-  const openLpmamaDrawer = async (lead: any) => {
-    setActiveLpmamaLead(lead);
-    setProspectReplyInput("");
-    const { data } = await supabase
-      .from("lead_events")
-      .select("*")
-      .eq("lead_id", lead.id)
-      .order("created_at", { ascending: true });
-    setLpmamaEvents(data || []);
-  };
-
-  const handleSimulateProspectReply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeLpmamaLead || !prospectReplyInput.trim()) return;
-    setIsQualifying(true);
-
-    const res = await fetch("/api/ai/qualify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leadId: activeLpmamaLead.id,
-        prospectReply: prospectReplyInput.trim(),
-      }),
+  const openConciergeForLead = (lead: any) => {
+    setActiveConciergeLead({
+      id: lead.id,
+      name: lead.full_name || lead.name || "Prospect",
+      email: lead.email,
+      phone: lead.phone,
+      status: lead.status,
+      source: lead.lead_source || lead.source,
+      notes: lead.notes,
+      qualification_score: lead.qualification_score ?? lead.intent_score ?? 0,
+      qualification_data: lead.qualification_data || lead.lpmama_data || {},
+      conversation_history: lead.conversation_history || [],
     });
-    const data = await res.json();
-    setIsQualifying(false);
-
-    if (!res.ok) return;
-
-    const updatedLead = {
-    ...activeLpmamaLead,
-    intent_score: data.intentScore,
-    status: data.status,
-    lpmama_data: data.lpmama,
-    lender_routing_status: data.lenderRoutingStatus || activeLpmamaLead.lender_routing_status,
-    assigned_lender_id: data.assignedLenderId || activeLpmamaLead.assigned_lender_id,
-  };
-
-    setActiveLpmamaLead(updatedLead);
-    setLeads((prev) =>
-      prev.map((item) => (item.id === updatedLead.id ? updatedLead : item))
-    );
-    setProspectReplyInput("");
-
-    const { data: refreshedEvents } = await supabase
-      .from("lead_events")
-      .select("*")
-      .eq("lead_id", updatedLead.id)
-      .order("created_at", { ascending: true });
-    setLpmamaEvents(refreshedEvents || []);
+    setIsConciergeOpen(true);
   };
 
   // Create new lead in Supabase
@@ -515,7 +476,7 @@ export default function DashboardClient({
   // Filter leads by search input
   const filteredLeads = leads.filter(
     (l) =>
-      l.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (l.full_name || l.name)?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       l.tag?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -599,7 +560,18 @@ export default function DashboardClient({
               className="bg-transparent border-none outline-none text-sm w-full text-white placeholder-gray-500"
             />
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveConciergeLead(null);
+                setIsConciergeOpen(true);
+              }}
+              className="bg-green-600/15 hover:bg-green-600/25 text-green-400 border border-green-500/30 px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              AI Concierge
+            </button>
             <div className="relative">
               <Bell size={20} className="text-gray-400 hover:text-white cursor-pointer" />
               <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
@@ -692,7 +664,7 @@ export default function DashboardClient({
                   >
                     {copiedLinkKey === "valuation"
                       ? "✓ Valuation Link Copied!"
-                      : "Copy Home Valuation Link"}
+                      : "Copy Property Valuation Link"}
                   </button>
                   <button
                     onClick={() => setIsAddModalOpen(true)}
@@ -726,7 +698,7 @@ export default function DashboardClient({
                         setDragOverStage(null);
                       }}
                       onStageChange={handleStageChange}
-                      onOpenLpmama={openLpmamaDrawer}
+                      onOpenConcierge={openConciergeForLead}
                     />
                   );
                 })}
@@ -824,122 +796,31 @@ export default function DashboardClient({
         </div>
       </main>
 
-      {/* Interactive LPMAMA AI Qualification Drawer */}
-      {activeLpmamaLead && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-end z-50">
-          <div className="bg-[#1A1D1F] border-l border-gray-800 w-full max-w-lg h-full flex flex-col justify-between p-6 overflow-y-auto">
-            <div className="space-y-5">
-              <div className="flex items-start justify-between border-b border-gray-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-semibold text-white">
-                      {activeLpmamaLead.full_name}
-                    </h3>
-                    <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-semibold">
-                      Intent: {activeLpmamaLead.intent_score ?? 25}%
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Source: {activeLpmamaLead.lead_source || "Direct"} • Stage:{" "}
-                    <span className="text-green-400">{activeLpmamaLead.status}</span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveLpmamaLead(null)}
-                  className="text-gray-400 hover:text-white text-sm px-2 py-1 cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* 6 LPMAMA Pillars Status Grid */}
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                  Lead Qualification Profile
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {[
-                    { label: "Location", val: activeLpmamaLead.lpmama_data?.location },
-                    { label: "Price", val: activeLpmamaLead.lpmama_data?.price },
-                    { label: "Mortgage", val: activeLpmamaLead.lpmama_data?.mortgage },
-                    { label: "Agent Status", val: activeLpmamaLead.lpmama_data?.agent_status },
-                    { label: "Motivation", val: activeLpmamaLead.lpmama_data?.motivation },
-                    { label: "Appointment", val: activeLpmamaLead.lpmama_data?.appointment },
-                  ].map((pillar) => (
-                    <div
-                      key={pillar.label}
-                      className="bg-[#111315] border border-gray-800 rounded-lg p-2.5"
-                    >
-                      <div className="text-[10px] text-gray-500">{pillar.label}</div>
-                      <div className="text-gray-200 font-medium truncate mt-0.5">
-                        {pillar.val || "Pending..."}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* SMS / AI Conversation Thread */}
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                  Autonomous AI SMS Thread
-                </div>
-                <div className="bg-[#111315] border border-gray-800 rounded-xl p-4 space-y-3 max-h-72 overflow-y-auto">
-                  {lpmamaEvents.length === 0 ? (
-                    <p className="text-xs text-gray-500 italic">
-                      No AI messages yet. Simulate a prospect reply below to run autonomous AI qualification.
-                    </p>
-                  ) : (
-                    lpmamaEvents.map((ev) => (
-                      <div
-                        key={ev.id}
-                        className={`flex flex-col ${
-                          ev.message_sender === "prospect" ? "items-end" : "items-start"
-                        }`}
-                      >
-                        <span className="text-[10px] text-gray-500 mb-0.5">
-                          {ev.message_sender === "prospect" ? "Prospect" : "CloseFlow AI"}
-                        </span>
-                        <div
-                          className={`rounded-xl px-3.5 py-2 text-xs max-w-[85%] leading-relaxed ${
-                            ev.message_sender === "prospect"
-                              ? "bg-green-600 text-white"
-                              : "bg-[#24282B] border border-gray-700 text-gray-200"
-                          }`}
-                        >
-                          {ev.message_text}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Test / Simulate Prospect Reply Input */}
-            <form
-              onSubmit={handleSimulateProspectReply}
-              className="pt-4 border-t border-gray-800 flex gap-2"
-            >
-              <input
-                type="text"
-                value={prospectReplyInput}
-                onChange={(e) => setProspectReplyInput(e.target.value)}
-                placeholder="Simulate prospect SMS reply (e.g. 'Looking in Jacksonville around $550k')..."
-                className="flex-1 bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
-              />
-              <button
-                type="submit"
-                disabled={isQualifying}
-                className="bg-green-600 hover:bg-green-500 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer shrink-0"
-              >
-                {isQualifying ? "AI Replying..." : "Send Reply"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Live AI Concierge Drawer & Simulator */}
+      <AiConciergeDrawer
+        lead={activeConciergeLead}
+        isOpen={isConciergeOpen}
+        onClose={() => setIsConciergeOpen(false)}
+        onLeadUpdated={(updated) => {
+          setLeads((prev) =>
+            prev.map((item) =>
+              item.id === updated.id
+                ? {
+                    ...item,
+                    qualification_score: updated.qualification_score,
+                    intent_score: updated.qualification_score,
+                    qualification_data: updated.qualification_data,
+                    conversation_history: updated.conversation_history,
+                    notes: updated.notes,
+                  }
+                : item
+            )
+          );
+          setActiveConciergeLead((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
+      />
 
       {/* Add Lead Modal */}
       {isAddModalOpen && (
@@ -1315,7 +1196,7 @@ function KanbanColumn({
   onDragLeaveStage,
   onDropLead,
   onStageChange,
-  onOpenLpmama,
+  onOpenConcierge,
 }: {
   title: string;
   leads: any[];
@@ -1325,7 +1206,7 @@ function KanbanColumn({
   onDragLeaveStage: () => void;
   onDropLead: () => void;
   onStageChange: (leadId: string, newStatus: string) => void;
-  onOpenLpmama: (lead: any) => void;
+  onOpenConcierge: (lead: any) => void;
 }) {
   return (
     <div
@@ -1356,8 +1237,8 @@ function KanbanColumn({
         </div>
       ) : (
         leads.map((lead) => {
-          const score = Number(lead.intent_score ?? 25);
-          const isHot = score >= 70;
+          const score = Number(lead.qualification_score ?? lead.intent_score ?? 25);
+          const isHot = score >= 75;
           return (
             <div
               key={lead.id}
@@ -1368,7 +1249,7 @@ function KanbanColumn({
               <div className="flex items-start justify-between gap-1">
                 <div>
                   <div className="text-xs font-medium text-gray-200 mb-0.5">
-                    {lead.full_name}
+                    {lead.full_name || lead.name}
                   </div>
                   <div className="text-[11px] text-gray-400">
                     ${Number(lead.estimated_value || 0).toLocaleString()}
@@ -1380,7 +1261,7 @@ function KanbanColumn({
                       ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                       : "bg-[#111315] text-gray-400 border border-gray-700"
                   }`}
-                  title="Behavioral Intent Score"
+                  title="AI Concierge Readiness Score"
                 >
                   {isHot ? `🔥 ${score}%` : `${score}%`}
                 </span>
@@ -1389,15 +1270,15 @@ function KanbanColumn({
               <div className="flex items-center justify-between gap-1 pt-1 border-t border-gray-700/60">
                 <button
                   type="button"
-                  onClick={() => onOpenLpmama(lead)}
-                  className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer shrink-0"
+                  onClick={() => onOpenConcierge(lead)}
+                  className="bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer shrink-0 font-medium"
                 >
-                  AI Qualifier
+                  AI Concierge
                 </button>
                 <select
                   value={lead.status}
                   onChange={(e) => onStageChange(lead.id, e.target.value)}
-                  aria-label={`Move ${lead.full_name} to stage`}
+                  aria-label={`Move ${lead.full_name || lead.name} to stage`}
                   className="bg-[#1A1D1F] text-gray-300 text-[10px] border border-gray-700 rounded px-1.5 py-0.5 outline-none focus:border-green-500 cursor-pointer max-w-[90px]"
                 >
                   {PIPELINE_STAGES.map((stage) => (
