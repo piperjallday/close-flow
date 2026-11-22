@@ -1,105 +1,157 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { runAiConcierge, ConciergeMessage } from "../../../lib/concierge";
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
+    const body = await request.json();
     const {
       tenantId,
+      listingId,
       fullName,
       email,
       phone,
-      sourceType, // 'property_page' | 'home_valuation'
-      sourceLabel,
-      estimatedValue,
-      addressInput,
-    } = await req.json();
+      sourceType = "Property Capture",
+      propertyAddress = "",
+      estimatedValue = 0,
+      inquiryNotes = "",
+    } = body;
 
-    if (!tenantId || !fullName || (!email && !phone)) {
+    if (!tenantId || !fullName?.trim()) {
       return NextResponse.json(
-        { error: "Name and either email or phone are required." },
+        { error: "Workspace ID and full name are required." },
         { status: 400 }
       );
     }
 
-    const supabaseAdmin = createClient(
+    const adminSupabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch workspace custom AI opening script
-    const { data: tenant } = await supabaseAdmin
+    // 1. Fetch workspace branding & Twilio config
+    const { data: tenant } = await adminSupabase
       .from("tenants")
-      .select("name, ai_opening_script")
+      .select("id, name, twilio_phone_number, ai_opening_script")
       .eq("id", tenantId)
       .single();
 
-    const initialScore = sourceType === "home_valuation" ? 50 : 60;
-    const tag = sourceType === "home_valuation" ? "Seller Lead" : "Buyer Lead";
+    if (!tenant) {
+      return NextResponse.json({ error: "Workspace not found." }, { status: 404 });
+    }
 
-    const { data: lead, error } = await supabaseAdmin
+    const now = new Date().toISOString();
+    const initialContext = propertyAddress
+      ? `Inquired about ${propertyAddress}${inquiryNotes ? ` — "${inquiryNotes}"` : ""}`
+      : inquiryNotes || `Submitted ${sourceType} landing page`;
+
+    const initialHistory: ConciergeMessage[] = [
+      {
+        role: "user",
+        content: initialContext,
+        timestamp: now,
+      },
+    ];
+
+    // 2. Generate personalized AI Concierge greeting & initial score
+    const concierge = await runAiConcierge({
+      workspaceName: tenant.name || "CloseFlow Commercial",
+      leadName: fullName.trim().split(" ")[0],
+      history: initialHistory,
+      existingData: {
+        location: propertyAddress || undefined,
+        summary: initialContext,
+      },
+      listingsContext: propertyAddress,
+    });
+
+    const fullHistory: ConciergeMessage[] = [
+      ...initialHistory,
+      {
+        role: "assistant",
+        content: concierge.reply,
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    // 3. Insert lead into the tenant's Kanban pipeline
+    const { data: createdLead, error: leadError } = await adminSupabase
       .from("leads")
       .insert([
         {
-          tenant_id: tenantId,
+          tenant_id: tenant.id,
           full_name: fullName.trim(),
           email: email?.trim() || null,
           phone: phone?.trim() || null,
-          tag,
+          estimated_value: Number(estimatedValue) || 0,
           status: "New Leads",
-          estimated_value: Number(estimatedValue) || 450000,
-          intent_score: initialScore,
-          lead_source: sourceLabel || "Public Landing Page",
-          lpmama_data: {
-            location: addressInput || sourceLabel || "",
-            price: estimatedValue ? `$${Number(estimatedValue).toLocaleString()}` : "",
-            mortgage: "",
-            agent_status: "",
-            motivation: "",
-            appointment: "",
-            qualified: false,
-          },
+          tag: sourceType === "Valuation Funnel" ? "Seller / Valuation" : "Property Inquiry",
+          lead_source: sourceType,
+          qualification_score: concierge.score,
+          intent_score: concierge.score,
+          qualification_data: concierge.qualificationData,
+          conversation_history: fullHistory,
+          notes: concierge.qualificationData.summary || initialContext,
+          last_contacted_at: new Date().toISOString(),
         },
       ])
       .select()
       .single();
 
-    if (error || !lead) {
-      return NextResponse.json(
-        { error: error?.message || "Failed to capture lead" },
-        { status: 500 }
+    if (leadError) {
+      return NextResponse.json({ error: leadError.message }, { status: 400 });
+    }
+
+    // 4. Send automated SMS greeting if phone + Twilio configured
+    const cleanPhone = String(phone || "").trim();
+    if (
+      cleanPhone &&
+      tenant.twilio_phone_number &&
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN
+    ) {
+      const sid = process.env.TWILIO_ACCOUNT_SID;
+      const token = process.env.TWILIO_AUTH_TOKEN;
+      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          To: cleanPhone,
+          From: tenant.twilio_phone_number,
+          Body: concierge.reply,
+        }),
+      }).catch((err) => console.error("Twilio outbound welcome failed:", err));
+    }
+
+    // 5. Increment active workflow trigger counters for this tenant
+    const { data: activeWorkflows } = await adminSupabase
+      .from("workflows")
+      .select("id, triggers_count")
+      .eq("tenant_id", tenant.id)
+      .eq("status", "Active");
+
+    if (activeWorkflows && activeWorkflows.length > 0) {
+      await Promise.all(
+        activeWorkflows.map((wf) =>
+          adminSupabase
+            .from("workflows")
+            .update({ triggers_count: Number(wf.triggers_count || 0) + 1 })
+            .eq("id", wf.id)
+        )
       );
     }
 
-    // Personalize opening SMS/AI hook
-    const firstName = fullName.trim().split(" ")[0];
-    const rawScript =
-      tenant?.ai_opening_script ||
-      "Hi {{first_name}}, thanks for checking out {{source_label}}! Are you looking to make a move in the next 3-6 months?";
-
-    const openingMessage = rawScript
-      .replace(/\{\{first_name\}\}/gi, firstName)
-      .replace(/\{\{source_label\}\}/gi, sourceLabel || "our property report");
-
-    await supabaseAdmin.from("lead_events").insert([
-      {
-        tenant_id: tenantId,
-        lead_id: lead.id,
-        event_type: "lead_captured",
-        points_delta: initialScore,
-        message_sender: "ai",
-        message_text: openingMessage,
-      },
-    ]);
-
     return NextResponse.json({
       success: true,
-      leadId: lead.id,
-      openingMessage,
+      leadId: createdLead?.id,
+      conciergeReply: concierge.reply,
+      listingId: listingId || null,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Unexpected error" },
-      { status: 500 }
-    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to submit capture form";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
