@@ -101,7 +101,7 @@ function LoginFormContent() {
 
   return (
     <div className="bg-[#1A1D1F] p-8 rounded-xl border border-gray-800 w-full max-w-md shadow-2xl">
-      <Link href="/" className="flex items-center gap-3 mb-6 justify-center">
+      <Link href="/dashboard" className="flex items-center gap-3 mb-6 justify-center">
         <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-black font-bold text-xl">
           C
         </div>
@@ -235,7 +235,7 @@ function LoginFormContent() {
       </form>
 
       <div className="mt-6 text-center">
-        <Link href="/" className="text-xs text-gray-500 hover:text-gray-300">
+        <Link href="/dashboard" className="text-xs text-gray-500 hover:text-gray-300">
           ← Back to Home
         </Link>
       </div>
