@@ -162,3 +162,47 @@ html[data-theme="light"] [class*="bg-black/9"] {
 /* Catch Tremor's internal Tailwind SVG injections */
 .stroke-green-500, .stroke-emerald-500 { stroke: var(--brand-color) !important; }
 .fill-green-500, .fill-emerald-500 { fill: var(--brand-color) !important; }
+/* -------------------------------------------------------------------------- */
+/* BULLETPROOF LIGHT MODE HEX OVERRIDES (Map Overlays, Pills, & Controls)     */
+/* -------------------------------------------------------------------------- */
+
+/* Force all hardcoded dark background classes to white in Light Mode */
+html[data-theme="light"] [class*="bg-[#111315]"],
+html[data-theme="light"] [class*="bg-[#1A1D1F]"],
+html[data-theme="light"] [class*="bg-[#24282B]"],
+html[data-theme="light"] [class*="bg-[#2A2E32]"],
+html[data-theme="light"] [class*="bg-black"] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Force dark borders to light gray */
+html[data-theme="light"] [class*="border-gray-700"],
+html[data-theme="light"] [class*="border-gray-800"] {
+  border-color: #e5e7eb !important;
+}
+
+/* Force dark gray text to readable dark charcoal */
+html[data-theme="light"] [class*="text-gray-100"],
+html[data-theme="light"] [class*="text-gray-200"],
+html[data-theme="light"] [class*="text-gray-300"] {
+  color: #111827 !important;
+}
+
+html[data-theme="light"] [class*="text-gray-400"] {
+  color: #4b5563 !important;
+}
+
+/* Fix Google Maps Native Controls (Map/Satellite toggle) & Info Windows */
+html[data-theme="light"] .gm-style-iw,
+html[data-theme="light"] .gm-style-iw-c,
+html[data-theme="light"] .gm-style .gm-style-mtc button,
+html[data-theme="light"] .gm-control-active {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .gm-style-iw-d,
+html[data-theme="light"] .gm-style .gm-style-mtc button {
+  color: #111827 !important;
+}
