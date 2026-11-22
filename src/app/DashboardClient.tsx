@@ -72,7 +72,7 @@ export default function DashboardClient({
   const [workflows, setWorkflows] = useState<any[]>(initialWorkflows);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Interactive Alert Bell State
+  // Interactive Persistent Alert Bell State
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [lastSeenAlertTime, setLastSeenAlertTime] = useState<string>("");
 
@@ -88,6 +88,21 @@ export default function DashboardClient({
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [copiedLinkKey, setCopiedLinkKey] = useState<string | null>(null);
+
+  // Load persisted alert clear timestamp
+  useEffect(() => {
+    if (!tenantId) return;
+    const saved = localStorage.getItem(`closeflow_alerts_cleared_${tenantId}`);
+    if (saved) setLastSeenAlertTime(saved);
+  }, [tenantId]);
+
+  const handleClearAlerts = () => {
+    const nowIso = new Date().toISOString();
+    setLastSeenAlertTime(nowIso);
+    if (tenantId) {
+      localStorage.setItem(`closeflow_alerts_cleared_${tenantId}`, nowIso);
+    }
+  };
 
   // Real-time Team Sync across Leads, Listings, and Workflows
   useEffect(() => {
@@ -323,6 +338,22 @@ export default function DashboardClient({
     }
   };
 
+  // Delete lead from Kanban & Supabase
+  const handleDeleteLead = async (leadId: string) => {
+    const previousLeads = [...leads];
+    setLeads((prev) => prev.filter((l) => l.id !== leadId));
+
+    const { error } = await supabase
+      .from("leads")
+      .delete()
+      .eq("id", leadId);
+
+    if (error) {
+      console.error("Failed to delete lead:", error.message);
+      setLeads(previousLeads);
+    }
+  };
+
   // Toggle Workflow Active / Paused status
   const handleToggleWorkflow = async (workflowId: string, currentStatus: string) => {
     const nextStatus = currentStatus === "Active" ? "Paused" : "Active";
@@ -484,20 +515,19 @@ export default function DashboardClient({
       l.tag?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Recent Alerts & Unread Count
-  const recentAlerts = [...leads]
+  // Unread Alerts filtered by persisted clear timestamp
+  const unreadAlerts = [...leads]
+    .filter((l) => {
+      if (!lastSeenAlertTime) return true;
+      const itemTime = new Date(l.last_contacted_at || l.created_at || 0).getTime();
+      return itemTime > new Date(lastSeenAlertTime).getTime();
+    })
     .sort(
       (a, b) =>
         new Date(b.last_contacted_at || b.created_at || 0).getTime() -
         new Date(a.last_contacted_at || a.created_at || 0).getTime()
     )
     .slice(0, 8);
-
-  const unreadAlertsCount = recentAlerts.filter((l) => {
-    if (!lastSeenAlertTime) return true;
-    const itemTime = new Date(l.last_contacted_at || l.created_at || 0).getTime();
-    return itemTime > new Date(lastSeenAlertTime).getTime();
-  }).length;
 
   // Live Metric Calculations
   const activeLeadsCount = leads.filter((l) => l.status !== "Closed Deals").length;
@@ -592,7 +622,7 @@ export default function DashboardClient({
               AI Concierge
             </button>
 
-            {/* Interactive Alert Bell */}
+            {/* Interactive Persistent Alert Bell */}
             <div className="relative">
               <button
                 type="button"
@@ -601,9 +631,9 @@ export default function DashboardClient({
                 aria-label="Workspace Alerts"
               >
                 <Bell size={20} className="text-gray-300 hover:text-white" />
-                {unreadAlertsCount > 0 && (
+                {unreadAlerts.length > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
-                    {unreadAlertsCount}
+                    {unreadAlerts.length}
                   </span>
                 )}
               </button>
@@ -614,21 +644,23 @@ export default function DashboardClient({
                     <span className="text-xs font-semibold text-white">
                       Live Lead & Concierge Alerts
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setLastSeenAlertTime(new Date().toISOString())}
-                      className="text-[11px] text-green-400 hover:text-green-300 cursor-pointer"
-                    >
-                      Mark all read
-                    </button>
+                    {unreadAlerts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearAlerts}
+                        className="text-[11px] text-green-400 hover:text-green-300 cursor-pointer"
+                      >
+                        Clear all
+                      </button>
+                    )}
                   </div>
                   <div className="max-h-72 overflow-y-auto divide-y divide-gray-800/80">
-                    {recentAlerts.length === 0 ? (
-                      <div className="p-4 text-xs text-gray-500 text-center">
-                        No recent activity yet.
+                    {unreadAlerts.length === 0 ? (
+                      <div className="p-6 text-xs text-gray-500 text-center">
+                        All caught up! No new alerts.
                       </div>
                     ) : (
-                      recentAlerts.map((item) => {
+                      unreadAlerts.map((item) => {
                         const score = Number(
                           item.qualification_score ?? item.intent_score ?? 0
                         );
@@ -697,8 +729,8 @@ export default function DashboardClient({
             </span>
           </div>
 
-          {/* Top Row: Metrics & Kanban */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+          {/* Top Row: Metrics (compact) & Kanban (independent scroll/stretch) */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6 items-start">
             {/* Key Metrics Overview Card */}
             <div className="bg-[#24282B] rounded-xl p-6 border border-gray-800 flex flex-col">
               <div className="flex justify-between items-center mb-6">
@@ -713,7 +745,7 @@ export default function DashboardClient({
                 <Metric label="Total Revenue" value={formattedRevenue} trend="Live DB" />
               </div>
 
-              <div className="grid grid-cols-3 gap-4 items-end mt-auto pt-2">
+              <div className="grid grid-cols-3 gap-4 items-end pt-2">
                 {/* Bright Emerald Bar Chart */}
                 <div className="col-span-1 flex flex-col justify-end h-32">
                   <div className="flex items-end justify-between gap-1.5 h-24 px-1">
@@ -797,7 +829,7 @@ export default function DashboardClient({
                 </div>
               </div>
 
-              <div className="flex gap-4 overflow-x-auto pb-2 h-full">
+              <div className="flex gap-4 overflow-x-auto overflow-y-auto max-h-[420px] pb-2 pr-1">
                 {PIPELINE_STAGES.map((stage) => {
                   const stageLeads = filteredLeads.filter((l) => l.status === stage);
                   return (
@@ -819,6 +851,7 @@ export default function DashboardClient({
                         setDragOverStage(null);
                       }}
                       onStageChange={handleStageChange}
+                      onDeleteLead={handleDeleteLead}
                       onOpenConcierge={openConciergeForLead}
                     />
                   );
@@ -1317,6 +1350,7 @@ function KanbanColumn({
   onDragLeaveStage,
   onDropLead,
   onStageChange,
+  onDeleteLead,
   onOpenConcierge,
 }: {
   title: string;
@@ -1327,6 +1361,7 @@ function KanbanColumn({
   onDragLeaveStage: () => void;
   onDropLead: () => void;
   onStageChange: (leadId: string, newStatus: string) => void;
+  onDeleteLead: (leadId: string) => void;
   onOpenConcierge: (lead: any) => void;
 }) {
   return (
@@ -1376,16 +1411,29 @@ function KanbanColumn({
                     ${Number(lead.estimated_value || 0).toLocaleString()}
                   </div>
                 </div>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded font-semibold shrink-0 ${
-                    isHot
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                      : "bg-[#111315] text-gray-400 border border-gray-700"
-                  }`}
-                  title="AI Concierge Readiness Score"
-                >
-                  {isHot ? `🔥 ${score}%` : `${score}%`}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                      isHot
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        : "bg-[#111315] text-gray-400 border border-gray-700"
+                    }`}
+                    title="AI Concierge Readiness Score"
+                  >
+                    {isHot ? `🔥 ${score}%` : `${score}%`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteLead(lead.id);
+                    }}
+                    title={`Delete ${lead.full_name || lead.name}`}
+                    className="text-gray-500 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-700/60">
