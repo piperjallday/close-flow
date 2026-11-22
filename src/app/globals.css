@@ -117,3 +117,48 @@ html[data-theme="light"] [class*="bg-black/9"] {
   border: 1px solid #d1d5db !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
 }
+/* -------------------------------------------------------------------------- */
+/* DYNAMIC WHITE-LABEL THEME OVERRIDES (Listings, Reports, & Highlights)      */
+/* -------------------------------------------------------------------------- */
+
+/* 1. Global Text & Solid Backgrounds */
+.text-green-400, .text-green-500, .text-green-600 {
+  color: var(--brand-color) !important;
+}
+
+.bg-green-500, .bg-green-600 {
+  background-color: var(--brand-color) !important;
+  color: #ffffff !important;
+}
+
+/* 2. Translucent Highlights (Active Nav, Badges, Kanban Stages) */
+.bg-green-500\/10 { background-color: color-mix(in srgb, var(--brand-color) 10%, transparent) !important; }
+.bg-green-500\/15 { background-color: color-mix(in srgb, var(--brand-color) 15%, transparent) !important; }
+.bg-green-500\/20, .bg-green-600\/20 { background-color: color-mix(in srgb, var(--brand-color) 20%, transparent) !important; }
+
+/* 3. Borders (Active Nav, Input Focus, Map Pills) */
+.border-green-500 { border-color: var(--brand-color) !important; }
+.border-green-500\/30 { border-color: color-mix(in srgb, var(--brand-color) 30%, transparent) !important; }
+.border-green-500\/40 { border-color: color-mix(in srgb, var(--brand-color) 40%, transparent) !important; }
+.border-green-500\/60 { border-color: color-mix(in srgb, var(--brand-color) 60%, transparent) !important; }
+.focus\:border-green-500:focus { border-color: var(--brand-color) !important; }
+
+/* 4. Tremor Charts (/reports and /dashboard) */
+.recharts-bar-rectangle path,
+.recharts-pie-sector:first-child path {
+  fill: var(--brand-color) !important;
+  stroke: var(--brand-color) !important;
+}
+
+.recharts-area-line {
+  stroke: var(--brand-color) !important;
+}
+
+.recharts-area-area {
+  fill: var(--brand-color) !important;
+  fill-opacity: 0.25 !important;
+}
+
+/* Catch Tremor's internal Tailwind SVG injections */
+.stroke-green-500, .stroke-emerald-500 { stroke: var(--brand-color) !important; }
+.fill-green-500, .fill-emerald-500 { fill: var(--brand-color) !important; }
