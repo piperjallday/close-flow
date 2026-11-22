@@ -13,7 +13,7 @@ export default async function SettingsPage() {
   const { data: profile } = await supabase
     .from("users")
     .select(
-      "id, email, role, tenant_id, tenants(id, name, has_clearclose_ai, plan_tier, subscription_status, trial_ends_at, ai_opening_script)"
+      "id, email, role, tenant_id, tenants(id, name, has_clearclose_ai, plan_tier, subscription_status, trial_ends_at, is_unlimited, ai_opening_script)"
     )
     .eq("id", user.id)
     .single();
@@ -27,10 +27,12 @@ export default async function SettingsPage() {
       supabase
         .from("users")
         .select("id, email, role, created_at")
+        .eq("tenant_id", profile?.tenant_id)
         .order("created_at", { ascending: true }),
       supabase
         .from("tenant_invites")
         .select("*")
+        .eq("tenant_id", profile?.tenant_id)
         .order("created_at", { ascending: false }),
       supabase
         .from("partner_lenders")
@@ -49,6 +51,7 @@ export default async function SettingsPage() {
       initialPlanTier={tenantData?.plan_tier || "agent"}
       initialSubscriptionStatus={tenantData?.subscription_status || "trialing"}
       initialTrialEndsAt={tenantData?.trial_ends_at || null}
+      isUnlimited={Boolean(tenantData?.is_unlimited)}
       initialOpeningScript={
         tenantData?.ai_opening_script ||
         "Hi {{first_name}}, thanks for checking out {{source_label}}! Are you looking to make a move in the next 3-6 months?"

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   Building2, Users, UserPlus, Sparkles, Check, Trash2, Shield,
-  CreditCard, Copy, MailCheck, Landmark, MessageSquareText, Clock, AlertTriangle
+  CreditCard, Copy, MailCheck, Landmark, MessageSquareText, Clock, AlertTriangle, ShieldCheck
 } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import { createClient } from "../../lib/supabase/client";
@@ -17,7 +17,7 @@ const PLANS = [
     bundlePrice: "$31",
     period: "/mo",
     description: "Solo agents managing pipelines, Google Maps listings & AI lead capture.",
-    features: ["14-day free trial included", "Up to 2 team seats", "LPMAMA AI Qualifier & Capture Pages"],
+    features: ["14-day free trial included", "Up to 2 team seats", "AI Concierge Qualifier & Capture Pages"],
   },
   {
     id: "team",
@@ -49,6 +49,7 @@ export default function SettingsClient({
   initialPlanTier,
   initialSubscriptionStatus,
   initialTrialEndsAt,
+  isUnlimited = false,
   initialOpeningScript,
   initialMembers,
   initialInvites,
@@ -63,6 +64,7 @@ export default function SettingsClient({
   initialPlanTier: string;
   initialSubscriptionStatus: string;
   initialTrialEndsAt: string | null;
+  isUnlimited?: boolean;
   initialOpeningScript: string;
   initialMembers: any[];
   initialInvites: any[];
@@ -136,7 +138,7 @@ export default function SettingsClient({
 
     setIsSavingWorkspace(false);
     if (!error) {
-      setWorkspaceSavedMsg("Workspace & AI opening script saved");
+      setWorkspaceSavedMsg("Workspace & AI Concierge opening script saved");
       setTimeout(() => setWorkspaceSavedMsg(""), 3000);
     }
   };
@@ -166,7 +168,6 @@ export default function SettingsClient({
         return;
       }
 
-      // Preview fallback before live Stripe keys are configured
       if (targetPlan === "clearclose_ai") {
         const nextVal = !hasClearCloseAI;
         setHasClearCloseAI(nextVal);
@@ -317,25 +318,40 @@ export default function SettingsClient({
         <div>
           <h1 className="text-2xl font-semibold">Workspace, AI & Billing Settings</h1>
           <p className="text-sm text-gray-400">
-            Manage your CloseFlow subscription, ClearClose AI bundle discount, partner lenders, and AI scripts
+            Manage your CloseFlow subscription, ClearClose AI bundle discount, partner lenders, and AI Concierge scripts
           </p>
         </div>
 
-        {/* Trial Expiration Paywall Banner */}
-        {paywallReason === "trial_expired" && subStatus !== "active" && (
+        {/* Unlimited Founder & Team Access Banner */}
+        {isUnlimited && (
+          <div className="bg-green-500/15 border border-green-500/40 rounded-xl p-4 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-green-300">
+              <ShieldCheck size={18} className="text-green-400 shrink-0" />
+              <span>
+                <strong>Unlimited Enterprise Workspace Active:</strong> Your founder account and all invited teammates have unrestricted access with no trial limits.
+              </span>
+            </div>
+            <span className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full font-semibold shrink-0">
+              Unlimited Plan
+            </span>
+          </div>
+        )}
+
+        {/* Trial Expiration Paywall Banner (External Users Only) */}
+        {!isUnlimited && paywallReason === "trial_expired" && subStatus !== "active" && (
           <div className="bg-red-500/15 border border-red-500/40 rounded-xl p-4 flex items-center gap-3 text-sm text-red-200">
             <AlertTriangle size={20} className="text-red-400 shrink-0" />
             <div>
               <div className="font-semibold text-white">Your 14-Day Free Trial Has Ended</div>
               <p className="text-xs text-red-200/80">
-                Select a CloseFlow subscription tier below to unlock your pipeline, listings, and AI qualifier.
+                Select a CloseFlow subscription tier below to unlock your pipeline, listings, and AI Concierge.
               </p>
             </div>
           </div>
         )}
 
-        {/* Active Trial Status Banner */}
-        {subStatus === "trialing" && paywallReason !== "trial_expired" && (
+        {/* Active Trial Status Banner (External Users Only) */}
+        {!isUnlimited && subStatus === "trialing" && paywallReason !== "trial_expired" && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2.5 text-green-300">
               <Clock size={16} className="text-green-400 shrink-0" />
@@ -359,8 +375,11 @@ export default function SettingsClient({
                 <h2 className="text-base font-medium">CloseFlow Subscription Plans</h2>
                 <p className="text-xs text-gray-400">
                   Current Tier:{" "}
-                  <span className="text-green-400 font-semibold uppercase">{planTier}</span> •
-                  Status: <span className="capitalize">{subStatus}</span>
+                  <span className="text-green-400 font-semibold uppercase">
+                    {isUnlimited ? "UNLIMITED ENTERPRISE" : planTier}
+                  </span>{" "}
+                  • Status:{" "}
+                  <span className="capitalize">{isUnlimited ? "Active" : subStatus}</span>
                 </p>
               </div>
             </div>
@@ -379,7 +398,7 @@ export default function SettingsClient({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {PLANS.map((plan) => {
-              const isCurrent = planTier === plan.id && subStatus === "active";
+              const isCurrent = !isUnlimited && planTier === plan.id && subStatus === "active";
               const displayPrice = hasClearCloseAI ? plan.bundlePrice : plan.price;
 
               return (
@@ -422,15 +441,17 @@ export default function SettingsClient({
 
                   <button
                     type="button"
-                    disabled={!isAdmin || isCurrent || billingLoading === plan.id}
+                    disabled={!isAdmin || isUnlimited || isCurrent || billingLoading === plan.id}
                     onClick={() => handleSelectPlan(plan.id as any)}
                     className={`w-full py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      isCurrent
+                      isUnlimited || isCurrent
                         ? "bg-gray-800 text-gray-400 cursor-default"
                         : "bg-green-600 hover:bg-green-500 text-white"
                     }`}
                   >
-                    {billingLoading === plan.id
+                    {isUnlimited
+                      ? "Included in Unlimited Plan"
+                      : billingLoading === plan.id
                       ? "Connecting..."
                       : isCurrent
                       ? "Current Plan"
@@ -480,7 +501,7 @@ export default function SettingsClient({
           </button>
         </div>
 
-        {/* Free Partner Lender Network (Warm-Transfer & Pre-Qual Routing) */}
+        {/* Free Partner Lender Network */}
         <div className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -488,7 +509,7 @@ export default function SettingsClient({
               <div>
                 <h2 className="text-base font-medium">Partner Lender Network</h2>
                 <p className="text-xs text-gray-400">
-                  Free for lending partners to join — unapproved buyers auto-route here during AI qualification
+                  Free for lending partners to join — unapproved buyers auto-route here during AI Concierge qualification
                 </p>
               </div>
             </div>
@@ -616,7 +637,7 @@ export default function SettingsClient({
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs text-gray-400 flex items-center gap-1.5">
                 <MessageSquareText size={14} className="text-purple-400" />
-                <span>Custom LPMAMA AI Opening Greeting</span>
+                <span>Custom AI Concierge Opening Greeting</span>
               </label>
               <span className="text-[11px] text-gray-500">
                 Placeholders: <code>{"{{first_name}}"}</code>, <code>{"{{source_label}}"}</code>
@@ -657,7 +678,7 @@ export default function SettingsClient({
               <div>
                 <h2 className="text-base font-medium">Team Members & Automated Invites</h2>
                 <p className="text-xs text-gray-400">
-                  Invited teammates receive an email link and join this workspace automatically
+                  Invited teammates receive an email link and join this workspace automatically with full access
                 </p>
               </div>
             </div>
