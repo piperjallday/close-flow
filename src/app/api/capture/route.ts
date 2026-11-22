@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
-      tenantId,
+      tenantId: rawTenantId,
       listingId,
       fullName,
       email,
@@ -17,9 +17,9 @@ export async function POST(request: Request) {
       inquiryNotes = "",
     } = body;
 
-    if (!tenantId || !fullName?.trim()) {
+    if (!fullName?.trim()) {
       return NextResponse.json(
-        { error: "Workspace ID and full name are required." },
+        { error: "Full name is required." },
         { status: 400 }
       );
     }
@@ -29,11 +29,38 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 1. Fetch workspace branding & Twilio config
+    let resolvedTenantId = String(rawTenantId || "").trim();
+
+    // 1. If tenantId wasn't passed, resolve it from the listing record
+    if (!resolvedTenantId && listingId) {
+      const { data: listingRow } = await adminSupabase
+        .from("listings")
+        .select("tenant_id")
+        .eq("id", listingId)
+        .single();
+      if (listingRow?.tenant_id) {
+        resolvedTenantId = listingRow.tenant_id;
+      }
+    }
+
+    // 2. Fallback to primary workspace if still empty (e.g. legacy listing with null tenant_id)
+    if (!resolvedTenantId) {
+      const { data: primaryTenant } = await adminSupabase
+        .from("tenants")
+        .select("id")
+        .order("is_unlimited", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      if (primaryTenant?.id) {
+        resolvedTenantId = primaryTenant.id;
+      }
+    }
+
     const { data: tenant } = await adminSupabase
       .from("tenants")
       .select("id, name, twilio_phone_number, ai_opening_script")
-      .eq("id", tenantId)
+      .eq("id", resolvedTenantId)
       .single();
 
     if (!tenant) {
@@ -53,9 +80,8 @@ export async function POST(request: Request) {
       },
     ];
 
-    // 2. Generate personalized AI Concierge greeting & initial score
     const concierge = await runAiConcierge({
-      workspaceName: tenant.name || "CloseFlow Commercial",
+      workspaceName: tenant.name || "CloseFlow Real Estate",
       leadName: fullName.trim().split(" ")[0],
       history: initialHistory,
       existingData: {
@@ -74,7 +100,6 @@ export async function POST(request: Request) {
       },
     ];
 
-    // 3. Insert lead into the tenant's Kanban pipeline
     const { data: createdLead, error: leadError } = await adminSupabase
       .from("leads")
       .insert([
@@ -102,7 +127,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: leadError.message }, { status: 400 });
     }
 
-    // 4. Send automated SMS greeting if phone + Twilio configured
     const cleanPhone = String(phone || "").trim();
     if (
       cleanPhone &&
@@ -126,7 +150,6 @@ export async function POST(request: Request) {
       }).catch((err) => console.error("Twilio outbound welcome failed:", err));
     }
 
-    // 5. Increment active workflow trigger counters for this tenant
     const { data: activeWorkflows } = await adminSupabase
       .from("workflows")
       .select("id, triggers_count")
