@@ -102,10 +102,14 @@ const FEATURES = [
 ];
 
 export default async function LandingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch {
+    user = null;
+  }
 
   return (
     <div className="min-h-screen bg-[#111315] text-white font-sans selection:bg-green-500/30 selection:text-green-200">
