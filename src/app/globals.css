@@ -1,9 +1,83 @@
-@import "tailwindcss";
-
-body {
-  background-color: #111315;
-  color: #ffffff;
+:root {
+  --brand-color: #22c55e;
 }
-.map-tiles-dark {
-  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+
+/* Global White-Label Brand Accent Overrides */
+html[data-theme] .bg-green-600 {
+  background-color: var(--brand-color) !important;
+}
+html[data-theme] .hover\:bg-green-500:hover {
+  filter: brightness(1.08);
+}
+html[data-theme] .text-green-400,
+html[data-theme] .text-green-500 {
+  color: var(--brand-color) !important;
+}
+html[data-theme] .border-green-500,
+html[data-theme] .border-green-500\/30,
+html[data-theme] .border-green-500\/40,
+html[data-theme] .border-green-500\/60 {
+  border-color: var(--brand-color) !important;
+}
+html[data-theme] .bg-green-500\/10,
+html[data-theme] .bg-green-500\/15,
+html[data-theme] .bg-green-500\/20,
+html[data-theme] .bg-green-600\/15,
+html[data-theme] .bg-green-600\/20 {
+  background-color: color-mix(in srgb, var(--brand-color) 16%, transparent) !important;
+}
+
+/* Global Light Mode Theme Overrides Across All Pages */
+html[data-theme="light"] body,
+html[data-theme="light"] .bg-\[\#111315\] {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .bg-\[\#1A1D1F\],
+html[data-theme="light"] .bg-\[\#14171A\] {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .bg-\[\#24282B\],
+html[data-theme="light"] .bg-\[\#2A2E32\] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .border-gray-800,
+html[data-theme="light"] .border-gray-700,
+html[data-theme="light"] .divide-gray-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e5e7eb !important;
+}
+
+html[data-theme="light"] .text-white,
+html[data-theme="light"] .text-gray-100,
+html[data-theme="light"] .text-gray-200 {
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .text-gray-300 {
+  color: #374151 !important;
+}
+
+html[data-theme="light"] .text-gray-400,
+html[data-theme="light"] .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #d1d5db !important;
+}
+
+/* Keep solid primary CTA buttons readable in Light Mode */
+html[data-theme="light"] button.bg-green-600,
+html[data-theme="light"] a.bg-green-600 {
+  color: #ffffff !important;
 }

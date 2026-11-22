@@ -162,7 +162,31 @@ export default function SettingsClient({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const canCustomizeBranding =
-    isAdmin && (isUnlimited || planTier === "brokerage" || planTier === "enterprise");
+    isUnlimited || isAdmin || planTier === "brokerage" || planTier === "enterprise";
+
+  // Broadcast live theme & color changes globally across the entire app
+  const broadcastLiveTheme = (nextMode: string, nextColor: string, nextName?: string) => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("closeflow:theme-updated", {
+        detail: {
+          themeMode: nextMode,
+          brandColor: nextColor,
+          workspaceName: nextName ?? workspaceName,
+        },
+      })
+    );
+  };
+
+  const handleThemeModeChange = (nextMode: "dark" | "light") => {
+    setThemeMode(nextMode);
+    broadcastLiveTheme(nextMode, brandColor);
+  };
+
+  const handleBrandColorChange = (nextColor: string) => {
+    setBrandColor(nextColor);
+    broadcastLiveTheme(themeMode, nextColor);
+  };
 
   const handleSaveWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,6 +206,7 @@ export default function SettingsClient({
 
     setIsSavingWorkspace(false);
     if (!error) {
+      broadcastLiveTheme(themeMode, brandColor, workspaceName.trim());
       setWorkspaceSavedMsg("Workspace branding, colors & AI opening script saved");
       setTimeout(() => setWorkspaceSavedMsg(""), 3000);
     }
@@ -612,7 +637,7 @@ export default function SettingsClient({
                   <button
                     type="button"
                     disabled={!canCustomizeBranding}
-                    onClick={() => setThemeMode("dark")}
+                    onClick={() => handleThemeModeChange("dark")}
                     className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${
                       themeMode === "dark"
                         ? "bg-[#111315] border-green-500 text-white"
@@ -625,7 +650,7 @@ export default function SettingsClient({
                   <button
                     type="button"
                     disabled={!canCustomizeBranding}
-                    onClick={() => setThemeMode("light")}
+                    onClick={() => handleThemeModeChange("light")}
                     className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${
                       themeMode === "light"
                         ? "bg-white border-green-500 text-gray-900"
@@ -647,7 +672,7 @@ export default function SettingsClient({
                       key={swatch.hex}
                       type="button"
                       disabled={!canCustomizeBranding}
-                      onClick={() => setBrandColor(swatch.hex)}
+                      onClick={() => handleBrandColorChange(swatch.hex)}
                       title={swatch.label}
                       style={{ backgroundColor: swatch.hex }}
                       className={`w-7 h-7 rounded-full border-2 transition-transform cursor-pointer disabled:opacity-50 ${
@@ -662,7 +687,7 @@ export default function SettingsClient({
                       type="color"
                       disabled={!canCustomizeBranding}
                       value={brandColor}
-                      onChange={(e) => setBrandColor(e.target.value)}
+                      onChange={(e) => handleBrandColorChange(e.target.value)}
                       className="w-5 h-5 bg-transparent border-none cursor-pointer disabled:opacity-50"
                       aria-label="Custom Brand Color Picker"
                     />
@@ -670,7 +695,7 @@ export default function SettingsClient({
                       type="text"
                       disabled={!canCustomizeBranding}
                       value={brandColor}
-                      onChange={(e) => setBrandColor(e.target.value)}
+                      onChange={(e) => handleBrandColorChange(e.target.value)}
                       className="w-16 bg-transparent text-xs text-gray-200 outline-none uppercase"
                     />
                   </div>
