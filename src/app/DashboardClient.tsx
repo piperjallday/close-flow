@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   LayoutDashboard, Users, Building, DollarSign, Contact, CheckSquare,
   Workflow, BarChart as BarChartIcon, Settings, Search, Bell,
-  MoreHorizontal, Mail, Home, Star, LogOut, Plus, X, Trash2, Share2
+  MoreHorizontal, Mail, Home, Star, LogOut, Plus, X, Trash2, Share2, Sparkles
 } from "lucide-react";
 import { AreaChart } from "@tremor/react";
 import { createClient } from "../lib/supabase/client";
@@ -73,9 +73,10 @@ export default function DashboardClient({
   const [workflows, setWorkflows] = useState<any[]>(initialWorkflows);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Interactive Persistent Alert Bell State
+  // Interactive Persistent Alert Bell & Instant Form Lead Toast State
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [lastSeenAlertTime, setLastSeenAlertTime] = useState<string>("");
+  const [instantLeadToast, setInstantLeadToast] = useState<any | null>(null);
 
   // AI Concierge Drawer State
   const [activeConciergeLead, setActiveConciergeLead] = useState<LeadRecord | null>(null);
@@ -109,111 +110,113 @@ export default function DashboardClient({
   };
 
   // Real-time Team Sync across Leads, Listings, and Workflows
-useEffect(() => {
-  if (!tenantId) return;
+  useEffect(() => {
+    if (!tenantId) return;
 
-  const channelName = `dashboard-live-${tenantId}`;
+    const channelName = `dashboard-live-${tenantId}`;
 
-  // Clean up any stale channel instance before registering .on() listeners
-  const existingChannel = supabase
-    .getChannels()
-    .find((ch) => ch.topic === `realtime:${channelName}`);
-  if (existingChannel) {
-    supabase.removeChannel(existingChannel);
-  }
+    // Clean up any stale channel instance before registering .on() listeners
+    const existingChannel = supabase
+      .getChannels()
+      .find((ch) => ch.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      supabase.removeChannel(existingChannel);
+    }
 
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "leads",
-        filter: `tenant_id=eq.${tenantId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          setLeads((prev) =>
-            prev.some((l) => l.id === payload.new.id)
-              ? prev
-              : [payload.new, ...prev]
-          );
-        } else if (payload.eventType === "UPDATE") {
-          setLeads((prev) =>
-            prev.map((l) =>
-              l.id === payload.new.id ? { ...l, ...payload.new } : l
-            )
-          );
-        } else if (payload.eventType === "DELETE") {
-          setLeads((prev) => prev.filter((l) => l.id !== payload.old.id));
-        }
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "listings",
-        filter: `tenant_id=eq.${tenantId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          setListings((prev) =>
-            prev.some((item) => item.id === payload.new.id)
-              ? prev
-              : [payload.new, ...prev]
-          );
-        } else if (payload.eventType === "UPDATE") {
-          setListings((prev) =>
-            prev.map((item) =>
-              item.id === payload.new.id ? { ...item, ...payload.new } : item
-            )
-          );
-        } else if (payload.eventType === "DELETE") {
-          setListings((prev) => {
-            const updated = prev.filter((item) => item.id !== payload.old.id);
-            setSelectedListingId((curr) =>
-              curr === payload.old.id ? updated[0]?.id || null : curr
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "leads",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setLeads((prev) =>
+              prev.some((l) => l.id === payload.new.id)
+                ? prev
+                : [payload.new, ...prev]
             );
-            return updated;
-          });
+            setInstantLeadToast(payload.new);
+            setTimeout(() => setInstantLeadToast(null), 8000);
+          } else if (payload.eventType === "UPDATE") {
+            setLeads((prev) =>
+              prev.map((l) =>
+                l.id === payload.new.id ? { ...l, ...payload.new } : l
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            setLeads((prev) => prev.filter((l) => l.id !== payload.old.id));
+          }
         }
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "workflows",
-        filter: `tenant_id=eq.${tenantId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "INSERT") {
-          setWorkflows((prev) =>
-            prev.some((wf) => wf.id === payload.new.id)
-              ? prev
-              : [...prev, payload.new]
-          );
-        } else if (payload.eventType === "UPDATE") {
-          setWorkflows((prev) =>
-            prev.map((wf) =>
-              wf.id === payload.new.id ? { ...wf, ...payload.new } : wf
-            )
-          );
-        } else if (payload.eventType === "DELETE") {
-          setWorkflows((prev) => prev.filter((wf) => wf.id !== payload.old.id));
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "listings",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setListings((prev) =>
+              prev.some((item) => item.id === payload.new.id)
+                ? prev
+                : [payload.new, ...prev]
+            );
+          } else if (payload.eventType === "UPDATE") {
+            setListings((prev) =>
+              prev.map((item) =>
+                item.id === payload.new.id ? { ...item, ...payload.new } : item
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            setListings((prev) => {
+              const updated = prev.filter((item) => item.id !== payload.old.id);
+              setSelectedListingId((curr) =>
+                curr === payload.old.id ? updated[0]?.id || null : curr
+              );
+              return updated;
+            });
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "workflows",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setWorkflows((prev) =>
+              prev.some((wf) => wf.id === payload.new.id)
+                ? prev
+                : [...prev, payload.new]
+            );
+          } else if (payload.eventType === "UPDATE") {
+            setWorkflows((prev) =>
+              prev.map((wf) =>
+                wf.id === payload.new.id ? { ...wf, ...payload.new } : wf
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            setWorkflows((prev) => prev.filter((wf) => wf.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [tenantId, supabase]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, supabase]);
 
   // Add Lead Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -268,7 +271,7 @@ useEffect(() => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   const copyPublicLink = (key: string, path: string) => {
@@ -606,7 +609,7 @@ useEffect(() => {
       {/* Sidebar */}
       <aside className="w-64 bg-[#111315] border-r border-gray-800 flex flex-col shrink-0">
         <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-black font-bold">
+          <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white font-bold">
             C
           </div>
           <span className="text-xl font-semibold tracking-wide">CloseFlow</span>
@@ -658,7 +661,7 @@ useEffect(() => {
               }}
               className="bg-green-600/15 hover:bg-green-600/25 text-green-400 border border-green-500/30 px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
             >
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
               AI Concierge
             </button>
 
@@ -672,7 +675,7 @@ useEffect(() => {
               >
                 <Bell size={20} className="text-gray-300 hover:text-white" />
                 {unreadAlerts.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
                     {unreadAlerts.length}
                   </span>
                 )}
@@ -688,7 +691,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={handleClearAlerts}
-                        className="text-[11px] text-green-400 hover:text-green-300 cursor-pointer"
+                        className="text-[11px] text-green-400 hover:underline cursor-pointer"
                       >
                         Clear all
                       </button>
@@ -786,7 +789,7 @@ useEffect(() => {
               </div>
 
               <div className="grid grid-cols-3 gap-4 items-end pt-2">
-                {/* Bright Emerald Bar Chart */}
+                {/* Bar Chart */}
                 <div className="col-span-1 flex flex-col justify-end h-32">
                   <div className="flex items-end justify-between gap-1.5 h-24 px-1">
                     {barChartData.map((d) => {
@@ -795,7 +798,7 @@ useEffect(() => {
                         <div key={d.name} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
                           <div
                             style={{ height: `${heightPct}%` }}
-                            className="w-full bg-green-500 hover:bg-green-400 rounded-t transition-all shadow-[0_0_10px_rgba(34,197,94,0.35)]"
+                            className="w-full bg-green-600 rounded-t transition-all"
                             title={`${d.name}: ${d["Active Leads"]} leads`}
                           />
                         </div>
@@ -809,13 +812,13 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Bright Emerald Trend Area Chart */}
+                {/* Trend Area Chart */}
                 <div className="col-span-1 flex flex-col justify-end h-32">
                   <svg viewBox="0 0 180 80" className="w-full h-24 overflow-visible">
                     <defs>
                       <linearGradient id="emeraldArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#22c55e" stopOpacity="0.45" />
-                        <stop offset="100%" stopColor="#22c55e" stopOpacity="0.02" />
+                        <stop offset="0%" stopColor="var(--brand-color)" stopOpacity="0.45" />
+                        <stop offset="100%" stopColor="var(--brand-color)" stopOpacity="0.02" />
                       </linearGradient>
                     </defs>
                     <polygon
@@ -824,7 +827,7 @@ useEffect(() => {
                     />
                     <polyline
                       fill="none"
-                      stroke="#22c55e"
+                      stroke="var(--brand-color)"
                       strokeWidth="2.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -853,7 +856,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={() => copyPublicLink("valuation", `/valuation/${tenantId}`)}
-                    className="text-xs bg-[#111315] hover:bg-gray-800 border border-gray-700 text-green-400 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    className="text-xs bg-[#111315] hover:bg-gray-800 border border-gray-700 text-gray-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                   >
                     {copiedLinkKey === "valuation"
                       ? "✓ Valuation Link Copied!"
@@ -1005,6 +1008,41 @@ useEffect(() => {
           </div>
         </div>
       </main>
+
+      {/* Instant Form Lead Alert Banner */}
+      {instantLeadToast && (
+        <div className="fixed bottom-5 right-5 z-50 bg-[#24282B] border border-green-500 rounded-2xl p-4 shadow-2xl max-w-sm flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-green-600 text-white flex items-center justify-center shrink-0">
+            <Sparkles size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-white">New Form Lead Captured!</div>
+            <p className="text-xs text-gray-300 mt-0.5 truncate">
+              <strong>{instantLeadToast.full_name || "Prospect"}</strong> •{" "}
+              {instantLeadToast.source || "Lead Capture Form"}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  openConciergeForLead(instantLeadToast);
+                  setInstantLeadToast(null);
+                }}
+                className="bg-green-600 text-white text-[11px] font-semibold px-3 py-1 rounded-lg cursor-pointer"
+              >
+                Open AI Concierge
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstantLeadToast(null)}
+                className="text-[11px] text-gray-400 hover:text-white cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Live AI Concierge Drawer & Simulator */}
       <AiConciergeDrawer
@@ -1438,7 +1476,7 @@ function NavItem({
       href={href}
       className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-colors ${
         active
-          ? "bg-green-500/10 text-green-500"
+          ? "bg-green-500/15 text-green-400 border border-green-500/30"
           : "text-gray-400 hover:text-white hover:bg-gray-800/50"
       }`}
     >
@@ -1453,7 +1491,7 @@ function Metric({ label, value, trend }: { label: string; value: string; trend: 
     <div className="flex flex-col">
       <span className="text-gray-400 text-sm mb-1">{label}</span>
       <span className="text-2xl font-semibold mb-1">{value}</span>
-      <span className="text-green-500 text-xs font-medium">{trend}</span>
+      <span className="text-green-400 text-xs font-medium">{trend}</span>
     </div>
   );
 }
@@ -1500,7 +1538,7 @@ function KanbanColumn({
     >
       <div className="flex justify-between items-center text-sm mb-1">
         <span className="text-gray-300 font-medium">{title}</span>
-        <span className="bg-[#111315] text-green-500 text-[10px] px-2 py-0.5 rounded-full border border-gray-700">
+        <span className="bg-[#111315] text-gray-200 text-[10px] px-2 py-0.5 rounded-full border border-gray-700">
           {leads.length}
         </span>
       </div>
@@ -1533,7 +1571,7 @@ function KanbanColumn({
                     className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
                       isHot
                         ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                        : "bg-[#111315] text-gray-400 border border-gray-700"
+                        : "bg-[#111315] text-gray-300 border border-gray-700"
                     }`}
                     title="AI Concierge Readiness Score"
                   >
@@ -1557,7 +1595,7 @@ function KanbanColumn({
                 <button
                   type="button"
                   onClick={() => onOpenConcierge(lead)}
-                  className="w-full bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
+                  className="w-full bg-green-600/20 hover:bg-green-600/30 text-gray-100 border border-green-500/30 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
                 >
                   AI Concierge
                 </button>
@@ -1603,7 +1641,7 @@ function MetricRing({ value, label }: { value: number; label: string }) {
             cx="32"
             cy="32"
             r={radius}
-            stroke="#22c55e"
+            stroke="var(--brand-color)"
             strokeWidth="6"
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
@@ -1652,7 +1690,7 @@ function WorkflowCard({
           className={`text-[10px] px-2.5 py-0.5 rounded font-medium transition-colors cursor-pointer ${
             isPaused
               ? "bg-gray-800 hover:bg-gray-700 text-gray-400"
-              : "bg-green-500/20 hover:bg-green-500/30 text-green-500"
+              : "bg-green-500/20 hover:bg-green-500/30 text-gray-100 border border-green-500/30"
           }`}
         >
           {status}
@@ -1714,7 +1752,7 @@ function ListingItem({
       ? "bg-red-500/20 text-red-400"
       : status === "Under Contract"
       ? "bg-yellow-500/20 text-yellow-400"
-      : "bg-green-500/20 text-green-500";
+      : "bg-green-500/20 text-gray-100 border border-green-500/30";
 
   return (
     <div
@@ -1765,7 +1803,7 @@ function ListingItem({
               e.stopPropagation();
               onCopyLink();
             }}
-            className="text-[10px] bg-[#111315] hover:bg-gray-800 border border-gray-700 text-green-400 px-2 py-0.5 rounded transition-colors cursor-pointer"
+            className="text-[10px] bg-[#111315] hover:bg-gray-800 border border-gray-700 text-gray-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
           >
             {isLinkCopied ? "✓ Copied" : "Capture Link"}
           </button>
