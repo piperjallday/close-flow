@@ -77,6 +77,7 @@ export default function DashboardClient({
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [lastSeenAlertTime, setLastSeenAlertTime] = useState<string>("");
   const [instantLeadToast, setInstantLeadToast] = useState<any | null>(null);
+  const [mlsDripToast, setMlsDripToast] = useState<string>("");
 
   // AI Concierge Drawer State
   const [activeConciergeLead, setActiveConciergeLead] = useState<LeadRecord | null>(null);
@@ -282,6 +283,22 @@ export default function DashboardClient({
     navigator.clipboard.writeText(fullUrl);
     setCopiedLinkKey(key);
     setTimeout(() => setCopiedLinkKey(null), 2000);
+  };
+
+  const handleCopyMlsDripEmail = (lead: any) => {
+    const inboundDomain =
+      process.env.NEXT_PUBLIC_INBOUND_DRIP_DOMAIN || "inbound.closeflow.app";
+    const uniqueMlsEmail = `drip+${lead.id}@${inboundDomain}`;
+
+    navigator.clipboard.writeText(uniqueMlsEmail);
+    setCopiedLinkKey(`mls_${lead.id}`);
+    setMlsDripToast(
+      `Copied ${uniqueMlsEmail}! Paste into your MLS drip CC/Forward field for ${
+        lead.full_name || lead.name
+      }.`
+    );
+    setTimeout(() => setCopiedLinkKey(null), 2500);
+    setTimeout(() => setMlsDripToast(""), 6000);
   };
 
   const openConciergeForLead = (lead: any) => {
@@ -905,6 +922,7 @@ export default function DashboardClient({
                       title={stage}
                       leads={stageLeads}
                       isDragOver={dragOverStage === stage}
+                      copiedLinkKey={copiedLinkKey}
                       onDragStartLead={(leadId) => setDraggedLeadId(leadId)}
                       onDragOverStage={() => setDragOverStage(stage)}
                       onDragLeaveStage={() =>
@@ -921,6 +939,7 @@ export default function DashboardClient({
                       onDeleteLead={handleDeleteLead}
                       onOpenConcierge={openConciergeForLead}
                       onOpenClearCloseOffer={(lead) => setClearCloseOfferLead(lead)}
+                      onCopyMlsDrip={handleCopyMlsDripEmail}
                     />
                   );
                 })}
@@ -1018,6 +1037,20 @@ export default function DashboardClient({
           </div>
         </div>
       </main>
+
+      {/* MLS Drip CC Email Copied Toast */}
+      {mlsDripToast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-[#24282B] border border-green-500 rounded-2xl px-4 py-3 shadow-2xl max-w-lg text-xs text-white flex items-center gap-3">
+          <span className="font-semibold">{mlsDripToast}</span>
+          <button
+            type="button"
+            onClick={() => setMlsDripToast("")}
+            className="text-gray-400 hover:text-white cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Instant Form Lead Alert Banner */}
       {instantLeadToast && (
@@ -1590,6 +1623,7 @@ function KanbanColumn({
   title,
   leads,
   isDragOver = false,
+  copiedLinkKey = null,
   onDragStartLead,
   onDragOverStage,
   onDragLeaveStage,
@@ -1598,10 +1632,12 @@ function KanbanColumn({
   onDeleteLead,
   onOpenConcierge,
   onOpenClearCloseOffer,
+  onCopyMlsDrip,
 }: {
   title: string;
   leads: any[];
   isDragOver?: boolean;
+  copiedLinkKey?: string | null;
   onDragStartLead: (leadId: string) => void;
   onDragOverStage: () => void;
   onDragLeaveStage: () => void;
@@ -1610,6 +1646,7 @@ function KanbanColumn({
   onDeleteLead: (leadId: string) => void;
   onOpenConcierge: (lead: any) => void;
   onOpenClearCloseOffer: (lead: any) => void;
+  onCopyMlsDrip: (lead: any) => void;
 }) {
   return (
     <div
@@ -1690,6 +1727,15 @@ function KanbanColumn({
                   className="w-full bg-green-600/20 hover:bg-green-600/30 text-gray-100 border border-green-500/30 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
                 >
                   AI Concierge
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCopyMlsDrip(lead)}
+                  className="w-full bg-[#1A1D1F] hover:bg-gray-800 text-gray-100 border border-gray-700 text-[11px] py-1 px-2.5 rounded transition-colors cursor-pointer font-medium text-center"
+                >
+                  {copiedLinkKey === `mls_${lead.id}`
+                    ? "✓ MLS Drip Email Copied!"
+                    : "Set MLS Drip (Copy CC Email)"}
                 </button>
                 <button
                   type="button"
