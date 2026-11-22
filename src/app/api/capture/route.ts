@@ -94,12 +94,19 @@ export async function POST(request: Request) {
       },
     ];
 
+    const timelineMatch = inquiryNotes.match(
+      /(Immediately|Within 3 months|3[–-]6 months|Just exploring value|ASAP \(Under 30 days\)|Within 30[–-]60 days|Just browsing)/i
+    );
+
     const concierge = await runAiConcierge({
       workspaceName,
       leadName: firstName,
       history: initialHistory,
+      sourceType,
       existingData: {
+        asset_type: sourceType === "Valuation Funnel" ? "Seller" : "Buyer",
         location: propertyAddress || undefined,
+        timeline: timelineMatch ? timelineMatch[0] : undefined,
         summary: initialContext,
       },
       listingsContext: propertyAddress,
