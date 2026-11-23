@@ -52,6 +52,10 @@ export default async function SettingsPage() {
       initialWorkspaceName={tenant?.name || "CloseFlow Workspace"}
       initialClearCloseAI={Boolean(tenant?.has_clearclose_ai)}
       initialPlanTier={tenant?.plan_tier || "agent"}
+      initialMetaPageId={tenant?.meta_page_id || ""}
+      initialMetaAccessToken={tenant?.meta_access_token || ""}
+      initialLinkedinAccessToken={tenant?.linkedin_access_token || ""}
+      initialSocialWebhookUrl={tenant?.social_webhook_url || ""}
       initialSubscriptionStatus={tenant?.subscription_status || "trialing"}
       initialTrialEndsAt={tenant?.trial_ends_at || null}
       isUnlimited={Boolean(tenant?.is_unlimited)}

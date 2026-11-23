@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Building2, Users, UserPlus, Sparkles, Check, Trash2, Shield,
   CreditCard, Copy, MailCheck, Landmark, MessageSquareText, Clock,
-  AlertTriangle, ShieldCheck, Palette, Sun, Moon
+  AlertTriangle, ShieldCheck, Palette, Sun, Moon, Share2
 } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import { createClient } from "../../lib/supabase/client";
@@ -87,6 +87,10 @@ export default function SettingsClient({
   initialThemeMode = "dark",
   initialBrandColor = "#22c55e",
   initialOpeningScript,
+  initialMetaPageId = "",
+  initialMetaAccessToken = "",
+  initialLinkedinAccessToken = "",
+  initialSocialWebhookUrl = "",
   initialMembers,
   initialInvites,
   initialLenders,
@@ -104,6 +108,10 @@ export default function SettingsClient({
   initialThemeMode?: string;
   initialBrandColor?: string;
   initialOpeningScript: string;
+  initialMetaPageId?: string;
+  initialMetaAccessToken?: string;
+  initialLinkedinAccessToken?: string;
+  initialSocialWebhookUrl?: string;
   initialMembers: any[];
   initialInvites: any[];
   initialLenders: any[];
@@ -126,11 +134,15 @@ export default function SettingsClient({
       )
     : 0;
 
-  // Workspace Name, White-Label Branding & AI Script State
+  // Workspace Name, White-Label Branding, Social Accounts & AI Script State
   const [workspaceName, setWorkspaceName] = useState(initialWorkspaceName);
   const [themeMode, setThemeMode] = useState(initialThemeMode || "dark");
   const [brandColor, setBrandColor] = useState(initialBrandColor || "#22c55e");
   const [openingScript, setOpeningScript] = useState(initialOpeningScript);
+  const [metaPageId, setMetaPageId] = useState(initialMetaPageId || "");
+  const [metaAccessToken, setMetaAccessToken] = useState(initialMetaAccessToken || "");
+  const [linkedinAccessToken, setLinkedinAccessToken] = useState(initialLinkedinAccessToken || "");
+  const [socialWebhookUrl, setSocialWebhookUrl] = useState(initialSocialWebhookUrl || "");
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [workspaceSavedMsg, setWorkspaceSavedMsg] = useState("");
 
@@ -163,6 +175,12 @@ export default function SettingsClient({
 
   const canCustomizeBranding =
     isUnlimited || isAdmin || planTier === "brokerage" || planTier === "enterprise";
+
+  const connectedSocialCount = [
+    metaPageId && metaAccessToken ? "Meta (FB/IG)" : null,
+    linkedinAccessToken ? "LinkedIn" : null,
+    socialWebhookUrl ? "Webhook Autoposter" : null,
+  ].filter(Boolean);
 
   // Broadcast live theme & color changes globally across the entire app
   const broadcastLiveTheme = (nextMode: string, nextColor: string, nextName?: string) => {
@@ -201,13 +219,17 @@ export default function SettingsClient({
         theme_mode: themeMode,
         brand_color: brandColor,
         ai_opening_script: openingScript.trim(),
+        meta_page_id: metaPageId.trim() || null,
+        meta_access_token: metaAccessToken.trim() || null,
+        linkedin_access_token: linkedinAccessToken.trim() || null,
+        social_webhook_url: socialWebhookUrl.trim() || null,
       })
       .eq("id", tenantId);
 
     setIsSavingWorkspace(false);
     if (!error) {
       broadcastLiveTheme(themeMode, brandColor, workspaceName.trim());
-      setWorkspaceSavedMsg("Workspace branding, colors & AI opening script saved");
+      setWorkspaceSavedMsg("Workspace branding, social connections & AI script saved");
       setTimeout(() => setWorkspaceSavedMsg(""), 3000);
     }
   };
@@ -387,7 +409,7 @@ export default function SettingsClient({
         <div>
           <h1 className="text-2xl font-semibold">Workspace, White-Label & Billing Settings</h1>
           <p className="text-sm text-gray-400">
-            Manage your CloseFlow subscription, ClearClose AI bundle discount, white-label brand colors, partner lenders, and AI Concierge scripts
+            Manage your CloseFlow subscription, ClearClose AI bundle discount, white-label brand colors, connected social media accounts, partner lenders, and AI Concierge scripts
           </p>
         </div>
 
@@ -582,7 +604,7 @@ export default function SettingsClient({
           </button>
         </div>
 
-        {/* Workspace Profile, White-Label Theme/Color Customizer & AI Opening Script */}
+        {/* Workspace Profile, White-Label Theme/Color Customizer, Social Connections & AI Opening Script */}
         <form
           onSubmit={handleSaveWorkspace}
           className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-6"
@@ -592,10 +614,10 @@ export default function SettingsClient({
               <Building2 size={18} className="text-green-400" />
               <div>
                 <h2 className="text-base font-medium">
-                  Workspace Profile, White-Label Colors & AI Opening Script
+                  Workspace Profile, White-Label Colors & Social Media Connections
                 </h2>
                 <p className="text-xs text-gray-400">
-                  Customize your brokerage name, Dark/Light workspace mode, brand accent colors, and AI Concierge greeting
+                  Customize your brokerage name, Dark/Light workspace mode, brand accent colors, connected social media accounts, and AI Concierge greeting
                 </p>
               </div>
             </div>
@@ -727,6 +749,78 @@ export default function SettingsClient({
               >
                 Primary Accent Button
               </span>
+            </div>
+          </div>
+
+          {/* Connected Social Media Accounts (Auto-Post New Listings) */}
+          <div className="bg-[#1A1D1F] border border-gray-800 rounded-xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
+                <Share2 size={15} className="text-green-400" />
+                <span>Connected Social Media Accounts (Auto-Post New Listings)</span>
+              </div>
+              <span className="text-[11px] text-green-400">
+                {connectedSocialCount.length > 0
+                  ? `Connected: ${connectedSocialCount.join(" • ")}`
+                  : "Facebook • Instagram • LinkedIn • Webhook"}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Connect your Meta Page ID &amp; Access Token for direct Facebook/Instagram publishing, or paste a Buffer / Make / Zapier webhook URL to auto-post across Facebook, Instagram, LinkedIn, TikTok, and YouTube Shorts.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1">
+                  Facebook / Instagram Page ID
+                </label>
+                <input
+                  type="text"
+                  disabled={!isAdmin}
+                  value={metaPageId}
+                  onChange={(e) => setMetaPageId(e.target.value)}
+                  placeholder="e.g. 109482736451920"
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1">
+                  Meta Graph Access Token (FB + IG)
+                </label>
+                <input
+                  type="password"
+                  disabled={!isAdmin}
+                  value={metaAccessToken}
+                  onChange={(e) => setMetaAccessToken(e.target.value)}
+                  placeholder="EAABsbCS1iHgBO..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1">
+                  LinkedIn Access Token (Optional)
+                </label>
+                <input
+                  type="password"
+                  disabled={!isAdmin}
+                  value={linkedinAccessToken}
+                  onChange={(e) => setLinkedinAccessToken(e.target.value)}
+                  placeholder="AQV..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1">
+                  Buffer / Make / Zapier Auto-Post Webhook URL
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={socialWebhookUrl}
+                  onChange={(e) => setSocialWebhookUrl(e.target.value)}
+                  placeholder="https://hook.us1.make.com/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
             </div>
           </div>
 

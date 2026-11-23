@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import {
-  Building2, MapPin, CheckCircle2, Sparkles, ArrowRight, ShieldCheck, Maximize2, Send
+  Building2, MapPin, CheckCircle2, Sparkles, ArrowRight,
+  ShieldCheck, Maximize2, Send, Lock, Images, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { createClient } from "../../../lib/supabase/client";
 
@@ -15,8 +16,9 @@ export default function PublicPropertyLandingPage() {
   const [listing, setListing] = useState<any | null>(null);
   const [brokerageName, setBrokerageName] = useState("CloseFlow Real Estate");
   const [loading, setLoading] = useState(true);
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
-  // Step 1 Quick Qualification Pills (Low-Friction Micro-Commitment)
+  // Step 1 Quick Qualification Pills
   const [moveTimeline, setMoveTimeline] = useState("Within 30–60 days");
   const [preApproved, setPreApproved] = useState("Yes, Pre-Approved");
 
@@ -28,13 +30,15 @@ export default function PublicPropertyLandingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Post-Submit Live AI Concierge Chat State
+  // Post-Submit Live AI Concierge Chat & Gallery Unlock State
   const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<
     Array<{ role: "user" | "assistant"; content: string }>
   >([]);
   const [chatInput, setChatInput] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
+
+  const isUnlocked = chatHistory.length > 0;
 
   useEffect(() => {
     async function fetchListing() {
@@ -57,6 +61,19 @@ export default function PublicPropertyLandingPage() {
     }
     fetchListing();
   }, [listingId, supabase]);
+
+  // Combine single image_url and image_urls array cleanly
+  const photos: string[] = (() => {
+    if (!listing) return [];
+    const list: string[] = [];
+    if (listing.image_url) list.push(listing.image_url);
+    if (Array.isArray(listing.image_urls)) {
+      for (const u of listing.image_urls) {
+        if (u && !list.includes(u)) list.push(u);
+      }
+    }
+    return list;
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +112,7 @@ export default function PublicPropertyLandingPage() {
           role: "assistant",
           content:
             data.conciergeReply ||
-            `Thanks ${fullName.split(" ")[0]}! When would you like to tour ${listing.address}?`,
+            `Hi ${fullName.split(" ")[0]}! Thanks for reaching out about ${listing.address}. All property photos are now unlocked on this page—would you like to schedule a tour (in person or via Google Meet / Zoom)?`,
         },
       ]);
     } catch (err: unknown) {
@@ -109,7 +126,8 @@ export default function PublicPropertyLandingPage() {
     const msg = (quickText ?? chatInput).trim();
     if (!msg || !createdLeadId || sendingChat) return;
 
-    const nextHistory = [...chatHistory, { role: "user" as const, content: msg }];
+    const priorHistory = [...chatHistory];
+    const nextHistory = [...priorHistory, { role: "user" as const, content: msg }];
     setChatHistory(nextHistory);
     setChatInput("");
     setSendingChat(true);
@@ -122,7 +140,7 @@ export default function PublicPropertyLandingPage() {
           leadId: createdLeadId,
           tenantId: listing?.tenant_id || "",
           message: msg,
-          history: nextHistory,
+          history: priorHistory,
         }),
       });
       const data = await res.json();
@@ -171,19 +189,99 @@ export default function PublicPropertyLandingPage() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-        {/* Left: Property Hero + Highlights */}
-        <div className="lg:col-span-7 space-y-6">
-          {listing.image_url ? (
-            <div className="relative rounded-2xl overflow-hidden border border-gray-800 bg-[#1A1D1F] aspect-video">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={listing.image_url}
-                alt={listing.address}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-xs border border-gray-700 text-xs text-gray-100 px-3 py-1 rounded-full font-medium">
-                {listing.tag || "Featured Property"}
+        {/* Left: Property Photo Gallery + Highlights */}
+        <div className="lg:col-span-7 space-y-5">
+          {photos.length > 0 ? (
+            <div className="space-y-3">
+              {/* Main Hero Photo */}
+              <div className="relative rounded-2xl overflow-hidden border border-gray-800 bg-[#1A1D1F] aspect-video">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photos[isUnlocked ? activePhotoIndex : 0]}
+                  alt={listing.address}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-xs border border-gray-700 text-xs text-gray-100 px-3 py-1 rounded-full font-medium">
+                  {listing.tag || "Featured Property"}
+                </div>
+
+                {photos.length > 1 && (
+                  <div className="absolute top-3 right-3 bg-black/75 backdrop-blur-xs border border-gray-700 text-xs text-gray-100 px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+                    <Images size={13} />
+                    <span>
+                      {isUnlocked
+                        ? `Photo ${activePhotoIndex + 1} of ${photos.length}`
+                        : `1 of ${photos.length} Photos`}
+                    </span>
+                  </div>
+                )}
+
+                {isUnlocked && photos.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActivePhotoIndex((prev) =>
+                          prev === 0 ? photos.length - 1 : prev - 1
+                        )
+                      }
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white p-2 rounded-full border border-gray-700 cursor-pointer"
+                      aria-label="Previous photo"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActivePhotoIndex((prev) =>
+                          prev === photos.length - 1 ? 0 : prev + 1
+                        )
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white p-2 rounded-full border border-gray-700 cursor-pointer"
+                      aria-label="Next photo"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </>
+                )}
               </div>
+
+              {/* Thumbnail Strip: Locked Teaser Before Signup -> Full Interactive Gallery After Signup */}
+              {photos.length > 1 && (
+                <div className="grid grid-cols-4 gap-2.5">
+                  {photos.map((photoUrl, idx) => {
+                    const lockedThumb = !isUnlocked && idx > 0;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={lockedThumb}
+                        onClick={() => setActivePhotoIndex(idx)}
+                        className={`relative aspect-video rounded-xl overflow-hidden border transition-all ${
+                          isUnlocked && activePhotoIndex === idx
+                            ? "border-green-500 ring-2 ring-green-500/40"
+                            : "border-gray-800"
+                        } ${lockedThumb ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photoUrl}
+                          alt={`${listing.address} photo ${idx + 1}`}
+                          className={`w-full h-full object-cover ${
+                            lockedThumb ? "blur-sm scale-110 opacity-60" : ""
+                          }`}
+                        />
+                        {lockedThumb && (
+                          <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center text-[10px] font-semibold text-white p-1 text-center">
+                            <Lock size={13} className="mb-0.5 text-green-400" />
+                            <span>Unlock Photo</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             <div className="inline-flex items-center gap-2 bg-[#1A1D1F] border border-gray-800 text-xs text-gray-200 px-3 py-1.5 rounded-full">
@@ -203,7 +301,7 @@ export default function PublicPropertyLandingPage() {
             {Number(listing.beds) > 0 && (
               <>
                 <span className="text-gray-600">•</span>
-                <span>{listing.beds} Beds / Units</span>
+                <span>{listing.beds} Beds</span>
               </>
             )}
             {Number(listing.baths) > 0 && (
@@ -226,11 +324,11 @@ export default function PublicPropertyLandingPage() {
           <div className="bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <MapPin size={16} />
-              <span>Property Overview & Private Showing Access</span>
+              <span>Property Overview &amp; Private Showing Access</span>
             </div>
             <p className="text-sm text-gray-300 leading-relaxed">
               {listing.description ||
-                "Request the complete property packet, floor plans, seller disclosures, or lock in a private showing time. Our AI Concierge responds in seconds."}
+                "Unlock the full photo gallery, seller disclosures, and private showing availability below. Someone from our team will confirm your tour right away."}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
               <div className="bg-[#111315] border border-gray-800 rounded-xl p-3">
@@ -242,16 +340,16 @@ export default function PublicPropertyLandingPage() {
                 <div className="font-semibold text-gray-100 mt-0.5">&lt; 60 Seconds</div>
               </div>
               <div className="bg-[#111315] border border-gray-800 rounded-xl p-3">
-                <div className="text-gray-500">Represented By</div>
+                <div className="text-gray-500">Listed By</div>
                 <div className="font-semibold text-gray-200 mt-0.5 truncate">{brokerageName}</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right: 2-Step Qualification Funnel + Live Post-Submit AI Concierge Chat */}
+        {/* Right: Lead Capture Form -> Live AI Concierge Chat */}
         <div className="lg:col-span-5 bg-[#1A1D1F] border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-2xl sticky top-8">
-          {chatHistory.length > 0 ? (
+          {isUnlocked ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2.5 pb-3 border-b border-gray-800">
                 <div className="w-9 h-9 rounded-full bg-green-600/20 border border-green-500/40 flex items-center justify-center">
@@ -259,10 +357,10 @@ export default function PublicPropertyLandingPage() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">
-                    Live AI Concierge • {brokerageName}
+                    Photos Unlocked • {brokerageName}
                   </h2>
                   <p className="text-[11px] text-gray-400">
-                    Reply below to lock in your showing time or request disclosures
+                    Chat below to book a tour (in person, phone, or Google Meet / Zoom)
                   </p>
                 </div>
               </div>
@@ -280,7 +378,7 @@ export default function PublicPropertyLandingPage() {
                     {m.role === "assistant" && (
                       <div className="text-[10px] font-semibold text-gray-400 mb-1 flex items-center gap-1">
                         <Sparkles size={11} />
-                        <span>Concierge</span>
+                        <span>{brokerageName} Concierge</span>
                       </div>
                     )}
                     {m.content}
@@ -288,12 +386,12 @@ export default function PublicPropertyLandingPage() {
                 ))}
               </div>
 
-              {/* One-Tap Tour & Financing Quick Replies */}
               <div className="flex flex-wrap gap-1.5">
                 {[
-                  "Schedule a tour this weekend",
+                  "Tour in person this weekend",
+                  "Google Meet / Zoom walkthrough",
+                  "Quick phone call",
                   "Send seller disclosures",
-                  "Connect me with your lender",
                 ].map((chip) => (
                   <button
                     key={chip}
@@ -333,9 +431,13 @@ export default function PublicPropertyLandingPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <h2 className="text-xl font-bold text-white">Request Info & Private Tour</h2>
+                <h2 className="text-xl font-bold text-white">
+                  {photos.length > 1
+                    ? `Unlock All ${photos.length} Photos & Tour Times`
+                    : "Request Info & Private Tour"}
+                </h2>
                 <p className="text-xs text-gray-400 mt-1">
-                  Customize your inquiry below for instant showing availability.
+                  Enter your details for instant photo access and showing availability.
                 </p>
               </div>
 
@@ -345,7 +447,6 @@ export default function PublicPropertyLandingPage() {
                 </div>
               )}
 
-              {/* Step 1: Micro-Commitment Qualification Pills */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[11px] text-gray-400 mb-1">Move Timeframe</label>
@@ -387,7 +488,7 @@ export default function PublicPropertyLandingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Mobile Phone (for SMS tour alerts) *</label>
+                <label className="block text-xs text-gray-400 mb-1">Mobile Phone *</label>
                 <input
                   type="tel"
                   required
@@ -426,13 +527,13 @@ export default function PublicPropertyLandingPage() {
                 disabled={submitting}
                 className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
-                <span>{submitting ? "Unlocking Details..." : "Unlock Details & Schedule Tour"}</span>
+                <span>{submitting ? "Unlocking Photos..." : "Unlock Photos & Schedule Tour"}</span>
                 <ArrowRight size={16} />
               </button>
 
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-500 pt-1">
                 <ShieldCheck size={13} />
-                <span>Instant AI Concierge scheduling • Zero spam</span>
+                <span>Instant photo access • Zero spam</span>
               </div>
             </form>
           )}
