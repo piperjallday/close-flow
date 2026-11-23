@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Plus, Trash2, Share2, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Plus, Trash2, Share2, Image as ImageIcon, Sparkles, UploadCloud } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import { createClient } from "../../lib/supabase/client";
 
@@ -30,6 +30,7 @@ export default function ListingsClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
 
   const [newListing, setNewListing] = useState({
@@ -41,9 +42,58 @@ export default function ListingsClient({
     status: "For Sale",
     tag: "New",
     description: "",
-    imageUrls: "", // Multi-photo input
-    autoPostSocial: false, // 1-Click Social Publish Toggle
+    imageUrls: "", 
+    autoPostSocial: false, 
   });
+
+  // Handle Local Photo Uploads to Supabase Storage
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const uploadedUrls: string[] = [];
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+        const filePath = `uploads/${fileName}`;
+
+        // Upload to the public 'property-photos' bucket
+        const { error } = await supabase.storage
+          .from("property-photos")
+          .upload(filePath, file);
+
+        if (error) throw error;
+
+        // Get the public URL
+        const { data: publicUrlData } = supabase.storage
+          .from("property-photos")
+          .getPublicUrl(filePath);
+
+        if (publicUrlData?.publicUrl) {
+          uploadedUrls.push(publicUrlData.publicUrl);
+        }
+      }
+
+      // Append new URLs to the existing text box content
+      setNewListing((prev) => ({
+        ...prev,
+        imageUrls: prev.imageUrls 
+          ? `${prev.imageUrls}\n${uploadedUrls.join("\n")}` 
+          : uploadedUrls.join("\n")
+      }));
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Failed to upload photos. Please ensure your 'property-photos' bucket exists and is public.");
+    } finally {
+      setIsUploading(false);
+      // Clear the file input so they can upload the same files again if needed
+      e.target.value = ""; 
+    }
+  };
 
   const handleAddListing = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,7 +173,7 @@ export default function ListingsClient({
           
           setSaveStatus("Publishing to connected platforms...");
           
-          // Publish to configured platforms (Facebook, Instagram, LinkedIn, Webhook)
+          // Publish to configured platforms
           const platforms = ["facebook", "instagram", "linkedin", "tiktok"];
           
           for (const platform of platforms) {
@@ -459,13 +509,28 @@ export default function ListingsClient({
                 />
               </div>
 
+              {/* Photo Upload and URL Text Area */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1">
-                  Photo URLs (One per line)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs text-gray-400">
+                    Photo URLs (One per line)
+                  </label>
+                  <label className={`text-[10px] flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 px-2.5 py-1.5 rounded cursor-pointer transition-colors ${isUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                    <UploadCloud size={12} />
+                    <span className="font-medium">{isUploading ? "Uploading..." : "Upload Images"}</span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleFileUpload} 
+                      disabled={isUploading} 
+                    />
+                  </label>
+                </div>
                 <textarea
                   rows={3}
-                  placeholder="https://image.com/hero.jpg&#10;https://image.com/kitchen.jpg"
+                  placeholder="Paste URLs here, or use the Upload button above..."
                   value={newListing.imageUrls}
                   onChange={(e) =>
                     setNewListing({ ...newListing, imageUrls: e.target.value })
@@ -504,14 +569,14 @@ export default function ListingsClient({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  disabled={isSaving}
+                  disabled={isSaving || isUploading}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || isUploading}
                   className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-5 py-2 rounded-lg cursor-pointer flex items-center gap-2 transition-colors disabled:opacity-70"
                 >
                   {isSaving ? saveStatus || "Saving..." : "Save & Generate Links"}
