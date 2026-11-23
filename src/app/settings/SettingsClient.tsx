@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Building2, Users, UserPlus, Sparkles, Check, Trash2, Shield,
   CreditCard, Copy, MailCheck, Landmark, MessageSquareText, Clock,
-  AlertTriangle, ShieldCheck, Palette, Sun, Moon, Share2
+  AlertTriangle, ShieldCheck, Palette, Sun, Moon, Link as LinkIcon, Share2
 } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import { createClient } from "../../lib/supabase/client";
@@ -87,6 +87,12 @@ export default function SettingsClient({
   initialThemeMode = "dark",
   initialBrandColor = "#22c55e",
   initialOpeningScript,
+  initialFacebookUrl = "",
+  initialXUrl = "",
+  initialInstagramUrl = "",
+  initialYoutubeUrl = "",
+  initialLinkedinUrl = "",
+  initialTiktokUrl = "",
   initialMetaPageId = "",
   initialMetaAccessToken = "",
   initialLinkedinAccessToken = "",
@@ -108,6 +114,12 @@ export default function SettingsClient({
   initialThemeMode?: string;
   initialBrandColor?: string;
   initialOpeningScript: string;
+  initialFacebookUrl?: string;
+  initialXUrl?: string;
+  initialInstagramUrl?: string;
+  initialYoutubeUrl?: string;
+  initialLinkedinUrl?: string;
+  initialTiktokUrl?: string;
   initialMetaPageId?: string;
   initialMetaAccessToken?: string;
   initialLinkedinAccessToken?: string;
@@ -134,15 +146,26 @@ export default function SettingsClient({
       )
     : 0;
 
-  // Workspace Name, White-Label Branding, Social Accounts & AI Script State
+  // Workspace Name, White-Label Branding, Social Links & AI Script State
   const [workspaceName, setWorkspaceName] = useState(initialWorkspaceName);
   const [themeMode, setThemeMode] = useState(initialThemeMode || "dark");
   const [brandColor, setBrandColor] = useState(initialBrandColor || "#22c55e");
   const [openingScript, setOpeningScript] = useState(initialOpeningScript);
-  const [metaPageId, setMetaPageId] = useState(initialMetaPageId || "");
-  const [metaAccessToken, setMetaAccessToken] = useState(initialMetaAccessToken || "");
-  const [linkedinAccessToken, setLinkedinAccessToken] = useState(initialLinkedinAccessToken || "");
-  const [socialWebhookUrl, setSocialWebhookUrl] = useState(initialSocialWebhookUrl || "");
+  
+  // Public Social URLs
+  const [facebookUrl, setFacebookUrl] = useState(initialFacebookUrl);
+  const [xUrl, setXUrl] = useState(initialXUrl);
+  const [instagramUrl, setInstagramUrl] = useState(initialInstagramUrl);
+  const [youtubeUrl, setYoutubeUrl] = useState(initialYoutubeUrl);
+  const [linkedinUrl, setLinkedinUrl] = useState(initialLinkedinUrl);
+  const [tiktokUrl, setTiktokUrl] = useState(initialTiktokUrl);
+
+  // Auto-Post API Integrations
+  const [metaPageId, setMetaPageId] = useState(initialMetaPageId);
+  const [metaAccessToken, setMetaAccessToken] = useState(initialMetaAccessToken);
+  const [linkedinAccessToken, setLinkedinAccessToken] = useState(initialLinkedinAccessToken);
+  const [socialWebhookUrl, setSocialWebhookUrl] = useState(initialSocialWebhookUrl);
+  
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [workspaceSavedMsg, setWorkspaceSavedMsg] = useState("");
 
@@ -153,7 +176,7 @@ export default function SettingsClient({
   const [billingLoading, setBillingLoading] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState("");
 
-  // Partner Lenders State (Free to join)
+  // Partner Lenders State
   const [lenders, setLenders] = useState(initialLenders);
   const [newLender, setNewLender] = useState({
     full_name: "",
@@ -176,13 +199,6 @@ export default function SettingsClient({
   const canCustomizeBranding =
     isUnlimited || isAdmin || planTier === "brokerage" || planTier === "enterprise";
 
-  const connectedSocialCount = [
-    metaPageId && metaAccessToken ? "Meta (FB/IG)" : null,
-    linkedinAccessToken ? "LinkedIn" : null,
-    socialWebhookUrl ? "Webhook Autoposter" : null,
-  ].filter(Boolean);
-
-  // Broadcast live theme & color changes globally across the entire app
   const broadcastLiveTheme = (nextMode: string, nextColor: string, nextName?: string) => {
     if (typeof window === "undefined") return;
     window.dispatchEvent(
@@ -219,6 +235,12 @@ export default function SettingsClient({
         theme_mode: themeMode,
         brand_color: brandColor,
         ai_opening_script: openingScript.trim(),
+        social_facebook_url: facebookUrl.trim() || null,
+        social_x_url: xUrl.trim() || null,
+        social_instagram_url: instagramUrl.trim() || null,
+        social_youtube_url: youtubeUrl.trim() || null,
+        social_linkedin_url: linkedinUrl.trim() || null,
+        social_tiktok_url: tiktokUrl.trim() || null,
         meta_page_id: metaPageId.trim() || null,
         meta_access_token: metaAccessToken.trim() || null,
         linkedin_access_token: linkedinAccessToken.trim() || null,
@@ -229,7 +251,7 @@ export default function SettingsClient({
     setIsSavingWorkspace(false);
     if (!error) {
       broadcastLiveTheme(themeMode, brandColor, workspaceName.trim());
-      setWorkspaceSavedMsg("Workspace branding, social connections & AI script saved");
+      setWorkspaceSavedMsg("Workspace settings & social profiles saved!");
       setTimeout(() => setWorkspaceSavedMsg(""), 3000);
     }
   };
@@ -409,7 +431,7 @@ export default function SettingsClient({
         <div>
           <h1 className="text-2xl font-semibold">Workspace, White-Label & Billing Settings</h1>
           <p className="text-sm text-gray-400">
-            Manage your CloseFlow subscription, ClearClose AI bundle discount, white-label brand colors, connected social media accounts, partner lenders, and AI Concierge scripts
+            Manage your CloseFlow subscription, ClearClose AI bundle discount, white-label brand colors, connected social media profiles, partner lenders, and AI Concierge scripts
           </p>
         </div>
 
@@ -604,7 +626,7 @@ export default function SettingsClient({
           </button>
         </div>
 
-        {/* Workspace Profile, White-Label Theme/Color Customizer, Social Connections & AI Opening Script */}
+        {/* MAIN WORKSPACE FORM: Branding, Social Links, and Scripts */}
         <form
           onSubmit={handleSaveWorkspace}
           className="bg-[#24282B] border border-gray-800 rounded-xl p-6 space-y-6"
@@ -614,15 +636,15 @@ export default function SettingsClient({
               <Building2 size={18} className="text-green-400" />
               <div>
                 <h2 className="text-base font-medium">
-                  Workspace Profile, White-Label Colors & Social Media Connections
+                  Workspace Profile, White-Label Colors & Social Links
                 </h2>
                 <p className="text-xs text-gray-400">
-                  Customize your brokerage name, Dark/Light workspace mode, brand accent colors, connected social media accounts, and AI Concierge greeting
+                  Customize your brokerage name, Dark/Light mode, brand colors, public social links, and AI Concierge greeting
                 </p>
               </div>
             </div>
             <span className="text-[11px] bg-green-500/15 border border-green-500/30 text-green-400 px-2.5 py-1 rounded-full font-medium">
-              White-Label Customization
+              Workspace Settings
             </span>
           </div>
 
@@ -752,23 +774,110 @@ export default function SettingsClient({
             </div>
           </div>
 
-          {/* Connected Social Media Accounts (Auto-Post New Listings) */}
-          <div className="bg-[#1A1D1F] border border-gray-800 rounded-xl p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
-                <Share2 size={15} className="text-green-400" />
-                <span>Connected Social Media Accounts (Auto-Post New Listings)</span>
+          {/* Public Social Media Profile URLs */}
+          <div className="bg-[#1A1D1F] border border-gray-800 rounded-xl p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
+              <LinkIcon size={15} className="text-green-400" />
+              <span>Public Social Media Profiles</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 mb-1.5">
+                  Facebook
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={facebookUrl}
+                  onChange={(e) => setFacebookUrl(e.target.value)}
+                  placeholder="https://www.facebook.com/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
               </div>
-              <span className="text-[11px] text-green-400">
-                {connectedSocialCount.length > 0
-                  ? `Connected: ${connectedSocialCount.join(" • ")}`
-                  : "Facebook • Instagram • LinkedIn • Webhook"}
-              </span>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 mb-1.5">
+                  YouTube
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/channel/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 mb-1.5">
+                  X (Twitter)
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={xUrl}
+                  onChange={(e) => setXUrl(e.target.value)}
+                  placeholder="https://x.com/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 mb-1.5">
+                  LinkedIn
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="https://www.linkedin.com/in/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 mb-1.5">
+                  Instagram
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={instagramUrl}
+                  onChange={(e) => setInstagramUrl(e.target.value)}
+                  placeholder="https://www.instagram.com/..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-300 mb-1.5">
+                  TikTok
+                </label>
+                <input
+                  type="url"
+                  disabled={!isAdmin}
+                  value={tiktokUrl}
+                  onChange={(e) => setTiktokUrl(e.target.value)}
+                  placeholder="https://www.tiktok.com/@..."
+                  className="w-full bg-[#111315] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Hidden Auto-Post API Connections */}
+          <div className="bg-[#1A1D1F] border border-gray-800 rounded-xl p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
+              <Share2 size={15} className="text-green-400" />
+              <span>Social Media Auto-Post Integrations</span>
             </div>
             <p className="text-[11px] text-gray-400">
-              Connect your Meta Page ID &amp; Access Token for direct Facebook/Instagram publishing, or paste a Buffer / Make / Zapier webhook URL to auto-post across Facebook, Instagram, LinkedIn, TikTok, and YouTube Shorts.
+              Connect Developer API tokens to automatically post new listings to your linked profiles.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               <div>
                 <label className="block text-[11px] text-gray-400 mb-1">
                   Facebook / Instagram Page ID
@@ -810,7 +919,7 @@ export default function SettingsClient({
               </div>
               <div>
                 <label className="block text-[11px] text-gray-400 mb-1">
-                  Buffer / Make / Zapier Auto-Post Webhook URL
+                  Webhook Dispatch URL (Make/Zapier)
                 </label>
                 <input
                   type="url"
@@ -848,9 +957,9 @@ export default function SettingsClient({
               <button
                 type="submit"
                 disabled={isSavingWorkspace}
-                className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-6 py-2 rounded-lg transition-colors cursor-pointer"
               >
-                {isSavingWorkspace ? "Saving..." : "Save Workspace & Brand Settings"}
+                {isSavingWorkspace ? "Saving..." : "Save Workspace Settings"}
               </button>
               {workspaceSavedMsg && (
                 <span className="text-xs text-green-400 flex items-center gap-1">

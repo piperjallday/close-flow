@@ -52,10 +52,6 @@ export default async function SettingsPage() {
       initialWorkspaceName={tenant?.name || "CloseFlow Workspace"}
       initialClearCloseAI={Boolean(tenant?.has_clearclose_ai)}
       initialPlanTier={tenant?.plan_tier || "agent"}
-      initialMetaPageId={tenant?.meta_page_id || ""}
-      initialMetaAccessToken={tenant?.meta_access_token || ""}
-      initialLinkedinAccessToken={tenant?.linkedin_access_token || ""}
-      initialSocialWebhookUrl={tenant?.social_webhook_url || ""}
       initialSubscriptionStatus={tenant?.subscription_status || "trialing"}
       initialTrialEndsAt={tenant?.trial_ends_at || null}
       isUnlimited={Boolean(tenant?.is_unlimited)}
@@ -65,6 +61,16 @@ export default async function SettingsPage() {
         tenant?.ai_opening_script ||
         "Hi {{first_name}}, thanks for reaching out about {{source_label}}! Are you looking to buy, sell, or invest in the next 90 days?"
       }
+      initialFacebookUrl={tenant?.social_facebook_url || ""}
+      initialXUrl={tenant?.social_x_url || ""}
+      initialInstagramUrl={tenant?.social_instagram_url || ""}
+      initialYoutubeUrl={tenant?.social_youtube_url || ""}
+      initialLinkedinUrl={tenant?.social_linkedin_url || ""}
+      initialTiktokUrl={tenant?.social_tiktok_url || ""}
+      initialMetaPageId={tenant?.meta_page_id || ""}
+      initialMetaAccessToken={tenant?.meta_access_token || ""}
+      initialLinkedinAccessToken={tenant?.linkedin_access_token || ""}
+      initialSocialWebhookUrl={tenant?.social_webhook_url || ""}
       initialMembers={members || []}
       initialInvites={invites || []}
       initialLenders={lenders || []}
