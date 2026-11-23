@@ -28,9 +28,35 @@ function extractKnownTimeline(lead: any, transcript: string): string {
     return String(savedTimeline).trim();
   }
   const match = transcript.match(
-    /(immediately|asap|under 30 days|within 30 days|30[–-]60 days|within 3 months|3[–-]6 months|this month|next month|this weekend|saturday|sunday|tomorrow|\b\d+\s*(?:days|weeks|months)\b)/i
+    /(immediately|asap|under 30 days|within 30 days|30[–-]60 days|within 3 months|3[–-]6 months|this month|next month|just exploring value|just exploring|\b\d+\s*(?:days|weeks|months)\b)/i
   );
   return match ? match[0].trim() : "";
+}
+
+function detectMeetingFormat(transcript: string): "In-Person" | "Google Meet / Zoom" | "Phone Call" | "" {
+  // Check the most recent preference mentioned by the lead
+  const inPersonIdx = Math.max(
+    transcript.lastIndexOf("in person"),
+    transcript.lastIndexOf("in-person")
+  );
+  const videoIdx = Math.max(
+    transcript.lastIndexOf("google"),
+    transcript.lastIndexOf("zoom"),
+    transcript.lastIndexOf("video")
+  );
+  const phoneIdx = Math.max(
+    transcript.lastIndexOf("phone call"),
+    transcript.lastIndexOf("over the phone"),
+    transcript.lastIndexOf("by phone"),
+    transcript.lastIndexOf("call me"),
+    /\bphone\b/.test(transcript) ? transcript.lastIndexOf("phone") : -1
+  );
+
+  const maxIdx = Math.max(inPersonIdx, videoIdx, phoneIdx);
+  if (maxIdx === -1) return "";
+  if (maxIdx === inPersonIdx) return "In-Person";
+  if (maxIdx === videoIdx) return "Google Meet / Zoom";
+  return "Phone Call";
 }
 
 export async function POST(request: Request) {
@@ -76,25 +102,30 @@ export async function POST(request: Request) {
     const workspaceName = tenant?.name || "CloseFlow Real Estate";
     const partnerLender = lenders?.[0] || null;
 
-    const userOnlyTranscript = [
+    // Only inspect the lead's own messages (not assistant prompts) for user choices
+    const userMessagesOnly = [
       ...history
         .filter((m: any) => m.role === "user")
         .map((m: any) => m.content || ""),
       message,
-      lead?.notes || "",
     ].join(" ");
 
+    const userWithNotes = `${userMessagesOnly} ${lead?.notes || ""}`;
+
     const fullLowerTranscript = [
-      userOnlyTranscript,
+      userWithNotes,
       lead?.lead_source || lead?.source || "",
       JSON.stringify(lead?.qualification_data || {}),
     ]
       .join(" ")
       .toLowerCase();
 
+    const lowerUserOnly = userMessagesOnly.toLowerCase();
     const lowerMessage = message.toLowerCase();
-    const knownAddress = extractKnownAddress(lead, userOnlyTranscript);
-    const knownTimeline = extractKnownTimeline(lead, userOnlyTranscript);
+
+    const knownAddress = extractKnownAddress(lead, userWithNotes);
+    const knownTimeline = extractKnownTimeline(lead, userWithNotes);
+    const meetingFormat = detectMeetingFormat(lowerUserOnly);
 
     const hasPreApprovalInfo = /pre-approv|preapprov|cash buyer|not pre-approv|need pre-approval/.test(
       fullLowerTranscript
@@ -102,11 +133,8 @@ export async function POST(request: Request) {
     const alreadyAnsweredBuyingNext = /buying next|also buying|buying another|not buying|just selling|only selling|don't have a property|no property/.test(
       fullLowerTranscript
     );
-    const alreadyBookedTime = /tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|\b\d{1,2}\s*(?:am|pm)\b|morning|afternoon|evening/.test(
-      fullLowerTranscript
-    );
-    const alreadyChoseMeetingFormat = /in person|in-person|google|zoom|video|phone call|over the phone/.test(
-      fullLowerTranscript
+    const alreadyBookedTime = /tomorrow|today|this weekend|next week|saturday|sunday|monday|tuesday|wednesday|thursday|friday|\b\d{1,2}\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|morning|afternoon|evening/.test(
+      lowerUserOnly
     );
 
     const isSeller =
@@ -127,18 +155,18 @@ export async function POST(request: Request) {
     if (roleTag !== "Unclassified") score = Math.max(score, 50);
     if (knownAddress) score = Math.max(score, 70);
     if (knownTimeline) score = Math.max(score, 80);
-    if (hasPreApprovalInfo || alreadyAnsweredBuyingNext || alreadyBookedTime) {
+    if (hasPreApprovalInfo || alreadyAnsweredBuyingNext || meetingFormat) {
       score = Math.max(score, 88);
     }
-    if (alreadyBookedTime && alreadyChoseMeetingFormat) {
+    if (alreadyBookedTime && meetingFormat) {
       score = Math.max(score, 95);
     }
 
-    const wantsTour = /tour|showing|see the home|walk through|schedule|appointment|call|saturday|sunday|tomorrow|\b\d{1,2}\s*(?:am|pm)\b/.test(
-      fullLowerTranscript
+    const wantsTour = /tour|showing|see the home|walk through|schedule|appointment|saturday|sunday|tomorrow|\b\d{1,2}\s*(?:am|pm)\b/.test(
+      lowerUserOnly
     );
     const wantsOffer = /write an offer|make an offer|submit an offer|put in an offer/.test(
-      fullLowerTranscript
+      lowerUserOnly
     );
 
     const needsLenderWarmTransfer =
@@ -156,8 +184,8 @@ Detected Role: ${roleTag}
 ALREADY KNOWN FACTS (DO NOT ASK FOR THESE AGAIN):
 - Property Address: ${knownAddress || "Not yet provided"}
 - Target Timeline: ${knownTimeline || "Not yet provided"}
-- Day/Time Selected: ${alreadyBookedTime ? "YES" : "Not yet"}
-- Meeting Format (In-Person vs Google Meet/Zoom): ${alreadyChoseMeetingFormat ? "YES" : "Not yet"}
+- Preferred Meeting Format: ${meetingFormat || "Not yet chosen (options: Phone Call, In-Person, or Google Meet / Zoom)"}
+- Day/Time Selected: ${alreadyBookedTime ? "YES — already provided by lead" : "Not yet"}
 - Partner Lender Available: ${
         partnerLender
           ? `${partnerLender.full_name} (${partnerLender.company}, ${partnerLender.phone})`
@@ -165,10 +193,10 @@ ALREADY KNOWN FACTS (DO NOT ASK FOR THESE AGAIN):
       }
 
 STRICT RULES:
-1. NEVER ask for information listed under ALREADY KNOWN FACTS above.
+1. NEVER ask for information listed under ALREADY KNOWN FACTS above. If they already picked Phone Call, In-Person, or Google Meet / Zoom, acknowledge that exact choice and do NOT ask for meeting format again.
 2. Always refer to the agent/brokerage as "someone from our team" (never say "senior advisor" or "advisor").
-3. When setting a meeting time, ask if they prefer an in-person meeting or a Google Meet / Zoom video call.
-4. Once both day/time and meeting format are confirmed, warmly let them know someone from our team has everything noted and will reach out to confirm. Keep replies concise (2-3 short sentences max).`;
+3. Offer three clear ways to connect: a quick phone call, an in-person meeting, or a Google Meet / Zoom video call.
+4. Once both meeting format and day/time are confirmed, let them know someone from our team has everything noted and will reach out to confirm. Keep replies concise (2-3 short sentences max).`;
 
       const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -199,39 +227,62 @@ STRICT RULES:
       const lastAssistantMsg =
         [...history].reverse().find((m: any) => m.role === "assistant")?.content || "";
 
+      const formatLabel =
+        meetingFormat === "Phone Call"
+          ? "phone call"
+          : meetingFormat === "In-Person"
+          ? "in-person meeting"
+          : meetingFormat === "Google Meet / Zoom"
+          ? "Google Meet / Zoom video call"
+          : "";
+
       if (/comp|comparable|recent sales/i.test(lowerMessage)) {
-        aiReply = `Got it, ${firstName}! Someone from our team is pulling the recent neighborhood comparable sales${
-          knownAddress ? ` for ${knownAddress}` : ""
-        } and will have them ready for you${
-          alreadyChoseMeetingFormat
-            ? "."
-            : "—would you prefer to review them in person or on a quick Google Meet / Zoom call?"
-        }`;
+        if (meetingFormat && !alreadyBookedTime) {
+          aiReply = `Got it, ${firstName}! Someone from our team is pulling the recent neighborhood comparable sales${
+            knownAddress ? ` for ${knownAddress}` : ""
+          } to go over on our ${formatLabel}. What day and time works best for you?`;
+        } else if (!meetingFormat) {
+          aiReply = `Got it, ${firstName}! Someone from our team is pulling the recent neighborhood comparable sales${
+            knownAddress ? ` for ${knownAddress}` : ""
+          }—would you prefer to go over them on a quick phone call, in person, or via Google Meet / Zoom?`;
+        } else {
+          aiReply = `Got it, ${firstName}! Someone from our team is pulling the recent neighborhood comparable sales${
+            knownAddress ? ` for ${knownAddress}` : ""
+          } and will have them ready for your ${formatLabel}.`;
+        }
       } else if (roleTag === "Unclassified") {
         aiReply = `Thanks ${firstName}! Just to make sure I point you in the right direction—are you looking to buy a home, sell your current property, or both?`;
       } else if (roleTag.includes("Seller")) {
         if (!knownAddress) {
           aiReply = `No problem at all, ${firstName}—we can line up your next home search once we value your current place. What is the street address of the property you're thinking of selling?`;
         } else if (!knownTimeline) {
-          aiReply = `Got it, ${firstName}—we have ${knownAddress} pulled up! What is your ideal timeline for selling, and what day/time works best to connect with someone from our team (in person or via Google Meet / Zoom)?`;
-        } else if (!alreadyBookedTime) {
-          aiReply = `Thanks ${firstName}! We have ${knownAddress} and your ${knownTimeline} timeline noted. What day and time works best to connect with someone from our team, and do you prefer an in-person meeting or a Google Meet / Zoom call?`;
-        } else if (!alreadyChoseMeetingFormat) {
-          aiReply = `Got that time locked in, ${firstName}! Would you prefer to meet in person at ${knownAddress} or hop on a quick Google Meet / Zoom video call with someone from our team?`;
+          aiReply = `Got it, ${firstName}—we have ${knownAddress} pulled up! What is your ideal timeline for selling, and would you prefer a quick phone call, an in-person visit, or a Google Meet / Zoom call with someone from our team?`;
+        } else if (meetingFormat && !alreadyBookedTime) {
+          aiReply = `Got it, ${firstName}—we'll set up a ${formatLabel} with someone from our team${
+            knownAddress ? ` regarding ${knownAddress}` : ""
+          }. What day and time works best for you?`;
+        } else if (!meetingFormat && !alreadyBookedTime) {
+          aiReply = `Thanks ${firstName}! We have ${knownAddress} and your ${knownTimeline} timeline noted. Would you prefer a quick phone call, an in-person meeting, or a Google Meet / Zoom call with someone from our team, and what day/time works best?`;
+        } else if (!meetingFormat && alreadyBookedTime) {
+          aiReply = `Got that time locked in, ${firstName}! Would you prefer a quick phone call, an in-person meeting at ${knownAddress}, or a Google Meet / Zoom video call with someone from our team?`;
         } else {
-          aiReply = `You're all set, ${firstName}! Someone from our team has your ${knownAddress} details and meeting preference noted and will reach out shortly to confirm.`;
+          aiReply = `You're all set, ${firstName}! Someone from our team has your ${knownAddress} details and ${formatLabel} time noted and will reach out shortly to confirm.`;
         }
       } else {
         if (needsLenderWarmTransfer && partnerLender) {
           aiReply = `Got it, ${firstName}! I can connect you with our partner loan officer ${partnerLender.full_name} at ${partnerLender.company} (${partnerLender.phone}) for a fast pre-approval${
             knownAddress ? ` for ${knownAddress}` : ""
-          }. What day/time works best to connect with someone from our team (in person or via Google Meet / Zoom)?`;
-        } else if (!alreadyBookedTime) {
-          aiReply = `Awesome, ${firstName}! What day and time works best for a private tour or quick intro with someone from our team, and do you prefer in person or Google Meet / Zoom?`;
-        } else if (!alreadyChoseMeetingFormat) {
-          aiReply = `Got that time noted, ${firstName}! Would you prefer an in-person walkthrough or a Google Meet / Zoom call with someone from our team?`;
+          }. What day and time works best to connect with someone from our team (phone call, in person, or Google Meet / Zoom)?`;
+        } else if (meetingFormat && !alreadyBookedTime) {
+          aiReply = `Got it, ${firstName}—we'll arrange a ${formatLabel} with someone from our team${
+            knownAddress ? ` for ${knownAddress}` : ""
+          }. What day and time works best for you?`;
+        } else if (!meetingFormat && !alreadyBookedTime) {
+          aiReply = `Awesome, ${firstName}! Would you prefer a quick phone call, an in-person tour, or a Google Meet / Zoom call with someone from our team, and what day/time works best?`;
+        } else if (!meetingFormat && alreadyBookedTime) {
+          aiReply = `Got that time noted, ${firstName}! Would you prefer a quick phone call, an in-person walkthrough, or a Google Meet / Zoom call with someone from our team?`;
         } else {
-          aiReply = `You're all set, ${firstName}! Someone from our team has everything confirmed${
+          aiReply = `You're all set, ${firstName}! Someone from our team has your ${formatLabel} confirmed${
             knownAddress ? ` for ${knownAddress}` : ""
           } and will follow up shortly.`;
         }
@@ -277,7 +328,7 @@ STRICT RULES:
 
     const summaryNote = `${roleTag} (${score}% qualified)${
       knownAddress ? ` • ${knownAddress}` : ""
-    } • Latest: "${message.slice(0, 80)}"`;
+    }${meetingFormat ? ` • ${meetingFormat}` : ""} • Latest: "${message.slice(0, 70)}"`;
 
     await supabase
       .from("leads")

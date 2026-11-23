@@ -174,6 +174,7 @@ export default function PropertyValuationLandingPage() {
               <div className="flex flex-wrap gap-1.5">
                 {[
                   "Yes, I'm also buying next",
+                  "Phone call",
                   "Meet in person",
                   "Google Meet / Zoom call",
                   "Send recent neighborhood comps",
